@@ -203,24 +203,153 @@ Uint8List monthlyWorkbookFromAnalysis(
       }
     }
   }
+  // Keep exported values and row positions stable while styling the report.
+  final navy = xlsx.ExcelColor.fromHexString('162536');
+  final ink = xlsx.ExcelColor.fromHexString('243649');
+  final muted = xlsx.ExcelColor.fromHexString('65788B');
+  final pale = xlsx.ExcelColor.fromHexString('F2F6FA');
+  final cyan = xlsx.ExcelColor.fromHexString('DDF2F5');
+  final white = xlsx.ExcelColor.fromHexString('FFFFFF');
+  final rule = xlsx.Border(
+    borderStyle: xlsx.BorderStyle.Thin,
+    borderColorHex: xlsx.ExcelColor.fromHexString('DCE4EC'),
+  );
+
+  for (var row = 0; row < sheet.maxRows; row++) {
+    sheet.setRowHeight(row, 28);
+    for (var col = 0; col < 6; col++) {
+      final cell = sheet.cell(
+        xlsx.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row),
+      );
+      cell.cellStyle = (cell.cellStyle ?? xlsx.CellStyle()).copyWith(
+        bottomBorderVal: row >= 3 && row < projectHeader - 1 ? rule : null,
+        fontFamilyVal: 'Calibri',
+        fontSizeVal: 11,
+        fontColorHexVal: col == 3 || col == 4 ? muted : ink,
+        verticalAlignVal: xlsx.VerticalAlign.Center,
+        horizontalAlignVal: col == 5
+            ? xlsx.HorizontalAlign.Right
+            : xlsx.HorizontalAlign.Left,
+        backgroundColorHexVal: row >= 3 && row < projectHeader - 1 && row.isOdd
+            ? pale
+            : white,
+        textWrappingVal: col <= 2
+            ? xlsx.TextWrapping.WrapText
+            : xlsx.TextWrapping.Clip,
+      );
+    }
+    if (row >= 3 && row < projectHeader - 1) {
+      final entry = analysis.rows[row - 3].entry;
+      // Estimate wrapped lines so long descriptions remain visible.
+      int lines(String text, int width) => text
+          .split('\n')
+          .fold(
+            0,
+            (sum, line) => sum + ((line.length / width).ceil().clamp(1, 100)),
+          );
+      final lineCount = [
+        lines(entry.task, 38),
+        lines(entry.category ?? '', 26),
+        lines(entry.project, 26),
+      ].reduce((a, b) => a > b ? a : b);
+      sheet.setRowHeight(row, (lineCount * 15 + 14).toDouble());
+    }
+  }
+  sheet.merge(
+    xlsx.CellIndex.indexByString('A1'),
+    xlsx.CellIndex.indexByString('F1'),
+  );
+  sheet.setRowHeight(0, 48);
+  sheet.setRowHeight(1, 12);
+  sheet.setRowHeight(projectHeader - 1, 12);
   for (final row in headers) {
+    final dark = row == 0 || row == 2;
+    sheet.setRowHeight(row, row == 0 ? 48 : 34);
     for (var col = 0; col < 6; col++) {
       final cell = sheet.cell(
         xlsx.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row),
       );
       cell.cellStyle = (cell.cellStyle ?? xlsx.CellStyle()).copyWith(
         boldVal: true,
-        backgroundColorHexVal: xlsx.ExcelColor.fromHexString('E9EFDF'),
+        fontSizeVal: row == 0
+            ? 20
+            : row == totalRow
+            ? 13
+            : 11,
+        fontColorHexVal: dark ? white : ink,
+        backgroundColorHexVal: dark ? navy : cyan,
       );
     }
   }
-  for (final col in [0, 1, 2]) {
-    sheet.setColumnWidth(col, 30);
+  // Summary labels span the unused columns, leaving the hours column clear.
+  for (var row = projectHeader; row <= totalRow; row++) {
+    sheet.merge(
+      xlsx.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+      xlsx.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row),
+    );
   }
+  // Strong grand total, restrained project section, and readable bank footer.
+  for (var col = 0; col < 6; col++) {
+    final cell = sheet.cell(
+      xlsx.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: totalRow),
+    );
+    cell.cellStyle = (cell.cellStyle ?? xlsx.CellStyle()).copyWith(
+      backgroundColorHexVal: navy,
+      fontColorHexVal: white,
+      topBorderVal: rule,
+      boldVal: true,
+    );
+  }
+  sheet.setRowHeight(totalRow, 40);
+  for (var row = projectHeader + 1; row < totalRow; row++) {
+    sheet.setRowHeight(row, 30);
+    for (final col in [0, 5]) {
+      final cell = sheet.cell(
+        xlsx.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row),
+      );
+      cell.cellStyle = (cell.cellStyle ?? xlsx.CellStyle()).copyWith(
+        bottomBorderVal: rule,
+      );
+    }
+  }
+  if (!bankDetails.isEmpty) {
+    final bankHeader = headers.last;
+    sheet.merge(
+      xlsx.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: bankHeader),
+      xlsx.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: bankHeader),
+    );
+    sheet.setRowHeight(bankHeader - 1, 18);
+    for (var row = bankHeader + 1; row < sheet.maxRows; row++) {
+      final label = sheet.cell(
+        xlsx.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+      );
+      final value = sheet.cell(
+        xlsx.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row),
+      );
+      label.cellStyle = (label.cellStyle ?? xlsx.CellStyle()).copyWith(
+        boldVal: true,
+        fontColorHexVal: muted,
+      );
+      value.cellStyle = (value.cellStyle ?? xlsx.CellStyle()).copyWith(
+        textWrappingVal: xlsx.TextWrapping.WrapText,
+      );
+      final field = bankDetails.fields[row - bankHeader - 1];
+      final lines = field.$2
+          .split('\n')
+          .fold<int>(
+            0,
+            (sum, line) => sum + (line.length / 115).ceil().clamp(1, 100),
+          );
+      sheet.setRowHeight(row, (lines * 15 + 15).toDouble());
+    }
+  }
+  sheet.setColumnWidth(0, 42);
+  sheet.setColumnWidth(1, 30);
+  sheet.setColumnWidth(2, 30);
   for (final col in [3, 4]) {
-    sheet.setColumnWidth(col, 23);
+    sheet.setColumnWidth(col, 24);
   }
-  sheet.setColumnWidth(5, 18);
+  sheet.setColumnWidth(5, 20);
   book.setDefaultSheet('Worktime');
   return Uint8List.fromList(book.encode()!);
 }
