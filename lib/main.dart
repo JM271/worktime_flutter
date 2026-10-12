@@ -7,6 +7,8 @@ import 'package:excel/excel.dart' as xlsx;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'monthly_report_dialog.dart';
+
 void main() => runApp(const WorktimeApp());
 
 class WorktimeApp extends StatelessWidget {
@@ -158,7 +160,9 @@ Uint8List monthlyWorkbook(List<Entry> entries, DateTime month) {
             xlsx.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row),
           )
           .cellStyle = xlsx.CellStyle(
-        numberFormat: xlsx.CustomDateTimeNumFormat(formatCode: 'dd.mm.yyyy hh:mm'),
+        numberFormat: xlsx.CustomDateTimeNumFormat(
+          formatCode: 'dd.mm.yyyy hh:mm',
+        ),
       );
     }
   }
@@ -194,10 +198,11 @@ Uint8List monthlyWorkbook(List<Entry> entries, DateTime month) {
     final cell = sheet.cell(
       xlsx.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row),
     );
-    if (cell.value is xlsx.DoubleCellValue)
+    if (cell.value is xlsx.DoubleCellValue) {
       cell.cellStyle = xlsx.CellStyle(
         numberFormat: xlsx.CustomNumericNumFormat(formatCode: '0.00'),
       );
+    }
   }
   for (final row in [0, 2, projectHeader, sheet.maxRows - 1]) {
     for (var col = 0; col < 5; col++) {
@@ -254,10 +259,11 @@ class _TrackerState extends State<Tracker> {
         project.text = running!.project;
       }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Saved data could not be read.')),
         );
+      }
     }
     if (mounted) setState(() => ready = true);
   }
@@ -273,12 +279,13 @@ class _TrackerState extends State<Tracker> {
       );
       if (!ok) throw Exception();
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Could not save. Please export your entries.'),
           ),
         );
+      }
     }
   }
 
@@ -298,7 +305,7 @@ class _TrackerState extends State<Tracker> {
   DateTime get monday => today.subtract(Duration(days: today.weekday - 1));
   Duration total(DateTime from, DateTime to) {
     int ms = 0;
-    for (final e in [...entries, if (running != null) running!]) {
+    for (final e in [...entries, ?running]) {
       final a = e.start.isAfter(from) ? e.start : from;
       final end = e.end ?? DateTime.now();
       final b = end.isBefore(to) ? end : to;
@@ -399,10 +406,11 @@ class _TrackerState extends State<Tracker> {
         ),
       );
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Export could not be opened.')),
         );
+      }
     }
   }
 
@@ -420,35 +428,23 @@ class _TrackerState extends State<Tracker> {
     final report = monthlyReport(entries, month);
     final filename =
         'worktime-${month.year}-${month.month.toString().padLeft(2, '0')}.xlsx';
-    final box = context.findRenderObject() as RenderBox?;
     try {
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [
-            XFile.fromData(
-              monthlyWorkbook(entries, month),
-              mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            ),
-          ],
-          fileNameOverrides: [filename],
-          sharePositionOrigin: box == null
-              ? null
-              : box.localToGlobal(Offset.zero) & box.size,
+      final bytes = monthlyWorkbook(entries, month);
+      await showDialog<void>(
+        context: context,
+        builder: (_) => MonthlyReportDialog(
+          report: report,
+          filename: filename,
+          bytes: bytes,
         ),
       );
     } catch (_) {
       if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: const Text('Monthly report'),
-          content: SingleChildScrollView(child: SelectableText(report)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c),
-              child: const Text('Done'),
-            ),
-          ],
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The monthly Excel report could not be created. Please try again.',
+          ),
         ),
       );
     }

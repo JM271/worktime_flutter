@@ -14,4 +14,4 @@ Run `flutter test`. The widget test starts/stops the timer and verifies the entr
 
 The APK supplied alongside this project, if present, is a debug build for personal testing, not an app-store release.
 
-Use Calculate month to select any day in the month and create a Excel (.xlsx) report through the phone share sheet. The report lists all completed entries chronologically, totals per project, and the monthly total. Hours are numeric decimal values. Entries crossing month boundaries are split, and active timers are excluded until stopped. Weekly goal: 20 hours.
+Use Calculate month to select any day in the month and review its report. Tap Open Excel to save the Excel (.xlsx) sheet locally and open it with the device's spreadsheet viewer or app. Tap Share Excel to share it or save a copy elsewhere. If no spreadsheet app is available, the report stays visible and can still be shared. The report lists all completed entries chronologically, totals per project, and the monthly total. Hours are numeric decimal values. Entries crossing month boundaries are split, and active timers are excluded until stopped. Weekly goal: 20 hours.
