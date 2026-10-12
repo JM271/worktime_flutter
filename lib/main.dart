@@ -460,15 +460,15 @@ class _TrackerState extends State<Tracker> {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final week = total(monday, now);
-    final shown =
-        entries
-            .where(
-              (e) =>
-                  filter == 'all' ||
-                  e.end!.isAfter(filter == 'today' ? today : monday),
-            )
-            .toList()
-          ..sort((a, b) => b.start.compareTo(a.start));
+    final monthStart = DateTime(now.year, now.month);
+    final nextMonthStart = DateTime(now.year, now.month + 1);
+    final shown = entries.where((e) {
+      if (filter == 'all') return true;
+      if (filter == 'month') {
+        return e.start.isBefore(nextMonthStart) && e.end!.isAfter(monthStart);
+      }
+      return e.end!.isAfter(filter == 'today' ? today : monday);
+    }).toList()..sort((a, b) => b.start.compareTo(a.start));
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -660,13 +660,19 @@ class _TrackerState extends State<Tracker> {
                             Wrap(
                               spacing: 8,
                               children: [
-                                for (final f in ['week', 'today', 'all'])
+                                for (final f in [
+                                  'week',
+                                  'today',
+                                  'all',
+                                  'month',
+                                ])
                                   ChoiceChip(
                                     label: Text(
                                       {
                                         'week': 'This week',
                                         'today': 'Today',
                                         'all': 'All time',
+                                        'month': 'This month',
                                       }[f]!,
                                     ),
                                     selected: filter == f,
