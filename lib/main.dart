@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
+
+import 'backup.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -60,6 +64,7 @@ class _TrackerState extends State<Tracker> {
   String filter = 'week';
   String? selectedCategory;
   String? taskError, categoryError;
+  bool backupBusy = false;
   BankDetails bankDetails = defaultBankDetails;
   @override
   void initState() {
@@ -315,6 +320,131 @@ class _TrackerState extends State<Tracker> {
     if (details == null || !mounted) return;
     setState(() => bankDetails = details);
     await save();
+  }
+
+  Future<void> createBackup() async {
+    setState(() => backupBusy = true);
+    try {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Save to Google Drive'),
+          content: const Text(
+            'In the next share menu, choose Drive, select your Google account and folder, then tap Save. The backup is uploaded only after you save it in Drive. If Drive is missing, install or sign in to the Google Drive app.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
+      final text = WorktimeBackup(
+        List.of(entries),
+        running,
+        bankDetails,
+      ).encode();
+      final box = context.findRenderObject() as RenderBox?;
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [
+            XFile.fromData(
+              Uint8List.fromList(utf8.encode(text)),
+              mimeType: 'application/json',
+            ),
+          ],
+          fileNameOverrides: [
+            'worktime-backup-${DateTime.now().toIso8601String().replaceAll(':', '-')}.json',
+          ],
+          sharePositionOrigin: box == null
+              ? null
+              : box.localToGlobal(Offset.zero) & box.size,
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Backup could not be shared. Please try again.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => backupBusy = false);
+    }
+  }
+
+  Future<void> restoreBackup() async {
+    setState(() => backupBusy = true);
+    try {
+      final picked = await FilePicker.pickFiles(type: FileType.any);
+      if (picked.isEmpty || !mounted) return;
+      final bytes = await picked.single.readAsBytes();
+      if (!mounted) return;
+      final backup = WorktimeBackup.decode(utf8.decode(bytes));
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Restore backup?'),
+          content: Text(
+            'Replace current data with ${backup.entries.length} completed entries, ${backup.running == null ? "no active timer" : "one active timer"}, and saved bank details? A recovery copy of your current data will be kept on this device.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Restore'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      final original = prefs!.getString('worktime');
+      if (original != null &&
+          !await prefs!.setString('worktime-before-restore', original)) {
+        throw const FormatException(
+          'Could not save a recovery copy. Nothing was restored.',
+        );
+      }
+      if (!await prefs!.setString('worktime', jsonEncode(backup.data))) {
+        throw const FormatException('Restore could not be saved.');
+      }
+      if (!mounted) return;
+      setState(() {
+        entries = backup.entries;
+        running = backup.running;
+        bankDetails = backup.bankDetails;
+        task.text = running?.task ?? '';
+        selectedCategory = running?.category;
+        taskError = null;
+        categoryError = null;
+      });
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Backup restored.')));
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error is FormatException
+                  ? error.message
+                  : 'Backup could not be restored. Current data was kept.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => backupBusy = false);
+    }
   }
 
   Widget sectionTitle(String eyebrow, String title, IconData icon) => Row(
@@ -958,6 +1088,40 @@ class _TrackerState extends State<Tracker> {
                                       : 'Edit bank details',
                                 ),
                               ),
+                            ],
+                          ),
+                        ),
+                        AppPanel(
+                          accent: AppColors.cyan,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              sectionTitle(
+                                'YOUR DATA',
+                                'Google Drive backup',
+                                Icons.backup_outlined,
+                              ),
+                              const SizedBox(height: 14),
+                              const Text(
+                                'Tap Back up to Google Drive, then choose Drive in the share menu and save the file. To restore, choose Drive in the file picker and select your backup. Includes entries, your active timer and bank details.',
+                              ),
+                              const SizedBox(height: 16),
+                              FilledButton.tonalIcon(
+                                onPressed: backupBusy ? null : createBackup,
+                                icon: const Icon(Icons.save_alt),
+                                label: const Text('Back up to Google Drive'),
+                              ),
+                              const SizedBox(height: 10),
+                              OutlinedButton.icon(
+                                onPressed: backupBusy ? null : restoreBackup,
+                                icon: const Icon(Icons.restore),
+                                label: const Text('Restore from Google Drive'),
+                              ),
+                              if (backupBusy)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 12),
+                                  child: LinearProgressIndicator(),
+                                ),
                             ],
                           ),
                         ),

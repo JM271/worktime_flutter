@@ -25,3 +25,9 @@ Tap Open Excel to save the Excel (.xlsx) workbook locally and open it with the d
 Report analysis runs locally and uses only recorded data. Entries crossing month/day/week boundaries are split for totals, and active timers are excluded until stopped. Checks identify overlaps, missing categories, invalid durations, sessions over 12 hours and future-dated entries. Overlapping sessions remain in recorded totals and are flagged for review. The workbook is a snapshot; regenerate it after updating entries.
 
 Use Edit bank details in the monthly review card to change the account holder, IBAN/account number, bank name, country, currency and BIC/SWIFT. These details are saved locally and appear in the report preview, text report and Excel Worktime sheet. Clear the fields to omit bank details from subsequent reports.
+
+## Backups
+Use Create backup to share a versioned JSON file to Files or cloud storage. Backups include completed entries, the active timer and bank details. Restore backup validates a selected file and asks before replacing current data. A recovery copy of the prior stored data is retained locally under `worktime-before-restore`. Backups are unencrypted; keep them in a private location. Restoring an active timer resumes from its original start time, including elapsed time since backup creation.
+
+### Google Drive backup
+Tap Back up to Google Drive, continue, choose Drive in the Android share menu, then select your account and folder and save. Upload is handled by the Google Drive app; Worktime cannot verify that upload completed. Restore from Google Drive opens the system file picker: choose Drive and select a saved Worktime JSON backup. This is manual cloud backup, not automatic sync.
