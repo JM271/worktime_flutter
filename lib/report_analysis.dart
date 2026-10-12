@@ -485,7 +485,8 @@ String _date(DateTime date) =>
     '${date.month.toString().padLeft(2, '0')}-'
     '${date.day.toString().padLeft(2, '0')}';
 
-String _stamp(DateTime date) => date.toIso8601String().replaceFirst('T', ' ');
+String _stamp(DateTime date) =>
+    '${_date(date)} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
 
 List<String> _insights(MonthlyAnalysis analysis) {
   final insights = <String>[];

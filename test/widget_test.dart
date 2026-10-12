@@ -54,7 +54,9 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Client work'), findsOneWidget);
-    expect(find.text('Category: Bike Repair'), findsOneWidget);
+    expect(find.text('Bike Repair'), findsWidgets);
+    expect(find.text('General'), findsNothing);
+    expect(find.text('Category: Bike Repair'), findsNothing);
   });
 
   testWidgets('A new timer needs both a description and a category', (

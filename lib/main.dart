@@ -65,6 +65,14 @@ class _TrackerState extends State<Tracker> {
   String? selectedCategory;
   String? taskError, categoryError;
   bool backupBusy = false;
+  String? confirmedBackup;
+  String get currentBackupData =>
+      jsonEncode(WorktimeBackup(entries, running, bankDetails).data);
+  String get backupStatus => confirmedBackup == null
+      ? 'No confirmed backup'
+      : confirmedBackup == currentBackupData
+      ? 'Backup confirmed · up to date'
+      : 'Changes since last backup';
   BankDetails bankDetails = defaultBankDetails;
   @override
   void initState() {
@@ -77,6 +85,7 @@ class _TrackerState extends State<Tracker> {
 
   Future<void> load() async {
     prefs = await SharedPreferences.getInstance();
+    confirmedBackup = prefs!.getString('worktime-confirmed-backup');
     try {
       final raw = jsonDecode(prefs!.getString('worktime') ?? '{"entries":[]}');
       entries = (raw['entries'] as List).map((e) => Entry.fromJson(e)).toList();
@@ -222,47 +231,6 @@ class _TrackerState extends State<Tracker> {
     }
   }
 
-  Future<void> export() async {
-    String cell(Object s) => '"${s.toString().replaceAll('"', '""')}"';
-    final rows = [
-      ['Task', 'Category', 'Project', 'Start', 'End', 'Hours'],
-      ...entries.map(
-        (e) => [
-          e.task,
-          e.category ?? '',
-          e.project,
-          e.start.toIso8601String(),
-          e.end!.toIso8601String(),
-          (e.end!.difference(e.start).inSeconds / 3600).toStringAsFixed(4),
-        ],
-      ),
-    ];
-    final csv = rows.map((r) => r.map(cell).join(',')).join('\r\n');
-    final box = context.findRenderObject() as RenderBox?;
-    try {
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [
-            XFile.fromData(
-              Uint8List.fromList(utf8.encode(csv)),
-              mimeType: 'text/csv',
-            ),
-          ],
-          fileNameOverrides: ['worktime.csv'],
-          sharePositionOrigin: box == null
-              ? null
-              : box.localToGlobal(Offset.zero) & box.size,
-        ),
-      );
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Export could not be opened.')),
-        );
-      }
-    }
-  }
-
   Future<void> calculateMonth() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -345,11 +313,9 @@ class _TrackerState extends State<Tracker> {
         ),
       );
       if (proceed != true || !mounted) return;
-      final text = WorktimeBackup(
-        List.of(entries),
-        running,
-        bankDetails,
-      ).encode();
+      final snapshot = WorktimeBackup(List.of(entries), running, bankDetails);
+      final snapshotData = jsonEncode(snapshot.data);
+      final text = snapshot.encode();
       final box = context.findRenderObject() as RenderBox?;
       await SharePlus.instance.share(
         ShareParams(
@@ -367,6 +333,35 @@ class _TrackerState extends State<Tracker> {
               : box.localToGlobal(Offset.zero) & box.size,
         ),
       );
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Did you save the backup to Drive?'),
+          content: const Text(
+            'Confirm only after Google Drive finishes saving the file. Worktime cannot verify the upload through the share menu.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Not saved'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Yes, saved to Drive'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true) {
+        if (!await prefs!.setString(
+          'worktime-confirmed-backup',
+          snapshotData,
+        )) {
+          throw StateError('Backup confirmation could not be saved.');
+        }
+        if (mounted) setState(() => confirmedBackup = snapshotData);
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -586,16 +581,11 @@ class _TrackerState extends State<Tracker> {
           ],
         ),
         Text(
-          entry.project,
+          entry.category?.trim().isNotEmpty == true
+              ? entry.category!.trim()
+              : 'Uncategorized',
           style: const TextStyle(color: AppColors.cyan, fontSize: 12),
         ),
-        if (entry.category != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            'Category: ${entry.category}',
-            style: const TextStyle(color: AppColors.muted, fontSize: 11),
-          ),
-        ],
         const SizedBox(height: 12),
         Wrap(
           spacing: 14,
@@ -911,38 +901,13 @@ class _TrackerState extends State<Tracker> {
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
                       children: [
-                        const Text(
-                          'YOUR TIME, WELL SPENT',
-                          style: TextStyle(
-                            color: AppColors.cyan,
-                            letterSpacing: 2.8,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Make time count.',
-                          style: Theme.of(context).textTheme.headlineLarge
-                              ?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: -1,
-                              ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Track your work. Keep your momentum.',
-                          style: TextStyle(
-                            color: AppColors.muted,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
                         Align(
                           alignment: Alignment.centerLeft,
                           child: statusPill(
-                            'Saved on this device',
-                            color: AppColors.lime,
+                            backupStatus,
+                            color: confirmedBackup == currentBackupData
+                                ? AppColors.lime
+                                : AppColors.cyan,
                           ),
                         ),
                         const SizedBox(height: 22),
@@ -975,14 +940,6 @@ class _TrackerState extends State<Tracker> {
                                 spacing: 10,
                                 runSpacing: 10,
                                 children: [
-                                  OutlinedButton.icon(
-                                    onPressed: export,
-                                    icon: const Icon(
-                                      Icons.ios_share_rounded,
-                                      size: 18,
-                                    ),
-                                    label: const Text('Export'),
-                                  ),
                                   FilledButton.tonalIcon(
                                     onPressed: manual,
                                     icon: const Icon(
@@ -1125,8 +1082,8 @@ class _TrackerState extends State<Tracker> {
                             ],
                           ),
                         ),
-                        const Text(
-                          'Saved on this device · Export to keep a backup',
+                        Text(
+                          backupStatus,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 10,

@@ -26,7 +26,7 @@ String hours(Duration d) {
 }
 
 String clock(Duration d) =>
-    '${d.inHours.toString().padLeft(2, '0')}:${(d.inMinutes % 60).toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+    '${d.inHours.toString().padLeft(2, '0')}:${(d.inMinutes % 60).toString().padLeft(2, '0')}';
 
 Duration monthlyTotal(List<Entry> entries, DateTime month) {
   final from = DateTime(month.year, month.month);
