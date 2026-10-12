@@ -9,8 +9,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:worktime/bank_details.dart';
 import 'package:worktime/main.dart';
 import 'package:worktime/monthly_report_dialog.dart';
+import 'package:worktime/report_analysis.dart';
 
 class ReportPaths extends PathProviderPlatform {
   ReportPaths(this.path);
@@ -29,12 +31,19 @@ void main() {
   late Directory directory;
   late PathProviderPlatform originalPaths;
   final month = DateTime(2026, 10);
+  final asOf = DateTime(2026, 10, 12, 12);
+  const bankDetails = BankDetails(
+    accountHolder: 'Example Account Holder',
+    accountNumber: '001234567890',
+    bankName: 'Example Bank',
+  );
   final entries = [
     Entry(
       'Client work',
       'Website',
       DateTime(2026, 10, 12, 9),
       DateTime(2026, 10, 12, 11),
+      'Bike Repair',
     ),
   ];
 
@@ -51,24 +60,68 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  Future<void> showReport(
+  Future<Uint8List> showReport(
     WidgetTester tester,
-    Future<OpenResult> Function(String) openFile,
-  ) async {
+    Future<OpenResult> Function(String) openFile, {
+    bool intelligent = false,
+    BankDetails bankDetails = const BankDetails(),
+  }) async {
+    final bytes = monthlyWorkbook(
+      entries,
+      month,
+      asOf: asOf,
+      bankDetails: bankDetails,
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: MonthlyReportDialog(
-            report: monthlyReport(entries, month),
+            report: monthlyReport(
+              entries,
+              month,
+              asOf: asOf,
+              bankDetails: bankDetails,
+            ),
             filename: 'worktime-2026-10.xlsx',
-            bytes: monthlyWorkbook(entries, month),
+            bytes: bytes,
+            analysis: intelligent
+                ? MonthlyAnalysis(entries, month, asOf: asOf)
+                : null,
+            bankDetails: bankDetails,
             openFile: openFile,
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
+    return bytes;
   }
+
+  testWidgets('Intelligent report stays readable on a narrow phone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(330, 850);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await showReport(
+      tester,
+      (_) async => OpenResult(),
+      intelligent: true,
+      bankDetails: bankDetails,
+    );
+
+    expect(find.text('Monthly report'), findsOneWidget);
+    expect(find.textContaining('Total time worked: 2h 00m'), findsOneWidget);
+    expect(find.text('How this month compares'), findsOneWidget);
+    expect(find.text('Where your time went'), findsOneWidget);
+    expect(find.text('Bike Repair'), findsWidgets);
+    expect(find.text('Account information'), findsOneWidget);
+    expect(find.textContaining('001234567890'), findsOneWidget);
+    expect(find.text('Open Excel'), findsOneWidget);
+    expect(find.text('Share Excel'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('Calculate month shows the report before opening or sharing', (
     tester,
@@ -120,7 +173,7 @@ void main() {
     await showReport(tester, (path) async {
       opened.complete(path);
       return OpenResult();
-    });
+    }, bankDetails: bankDetails);
     late String path;
     await tester.runAsync(() async {
       opened = Completer<String>();
@@ -130,9 +183,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(path, '${directory.path}/worktime-2026-10.xlsx');
     final bytes = await tester.runAsync(() => File(path).readAsBytes());
-    final sheet = xlsx.Excel.decodeBytes(bytes!)['Worktime'];
+    final book = xlsx.Excel.decodeBytes(bytes!);
+    expect(book.tables.keys, ['Worktime']);
+    final sheet = book['Worktime'];
     expect(sheet.rows[3][0]!.value, xlsx.TextCellValue('Client work'));
-    expect(sheet.rows.last[4]!.value, xlsx.IntCellValue(2));
+    expect(sheet.rows[3][1]!.value, xlsx.TextCellValue('Bike Repair'));
+    expect(sheet.rows[3][2]!.value, xlsx.TextCellValue('Website'));
+    final total = sheet.rows.firstWhere(
+      (row) => row.first?.value == xlsx.TextCellValue('Total time worked'),
+    );
+    expect(total[5]!.value, xlsx.IntCellValue(2));
+    final account = sheet.rows.firstWhere(
+      (row) => row.first?.value == xlsx.TextCellValue('IBAN / Account number'),
+    );
+    expect(account[1]!.value, xlsx.TextCellValue('001234567890'));
     expect(find.text('Monthly report'), findsOneWidget);
     expect(
       tester
@@ -152,10 +216,10 @@ void main() {
             shared.complete(call);
             return '';
           });
-      await showReport(tester, (_) async {
+      final preparedBytes = await showReport(tester, (_) async {
         opened.complete();
         return OpenResult(type: ResultType.noAppToOpen);
-      });
+      }, bankDetails: bankDetails);
       await tester.runAsync(() async {
         opened = Completer<void>();
         await tester.tap(find.text('Open Excel'));
@@ -177,7 +241,7 @@ void main() {
       final path = (arguments['paths'] as List).single as String;
       expect(path, endsWith('/worktime-2026-10.xlsx'));
       final bytes = await tester.runAsync(() => File(path).readAsBytes());
-      expect(bytes, monthlyWorkbook(entries, month));
+      expect(bytes, preparedBytes);
       expect(arguments['originWidth'], greaterThan(0));
       expect(arguments['originHeight'], greaterThan(0));
       expect(find.text('Monthly report'), findsOneWidget);
