@@ -18,7 +18,6 @@ void main() {
               [
                 Entry(
                   'New work',
-                  'General',
                   DateTime(2026, 10, 13, 9),
                   DateTime(2026, 10, 13, 10),
                   'Bike Repair',

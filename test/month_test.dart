@@ -45,7 +45,7 @@ void main() {
       final row = rowByLabel(sheet, label);
       expect(row[1]!.value, xlsx.TextCellValue(value));
       final number = rowIndexByLabel(sheet, label) + 1;
-      expect(sheet.spannedItems, contains('B$number:F$number'));
+      expect(sheet.spannedItems, contains('B$number:E$number'));
     }
     final cleared = BankDetails.fromJson(const BankDetails().toJson());
     expect(cleared.isEmpty, isTrue);
@@ -72,16 +72,15 @@ void main() {
     };
     final entry = Entry.fromJson(legacy);
     expect(entry.task, 'Client call');
-    expect(entry.project, 'Consulting');
+    expect(entry.toJson().containsKey('project'), isFalse);
     expect(entry.category, isNull);
-    expect(entry.toJson(), legacy);
+    expect(entry.toJson(), Map.of(legacy)..remove('project'));
     expect(monthlyTotal([entry], DateTime(2026, 10)), const Duration(hours: 3));
   });
 
   test('Category roundtrip preserves a separate task description', () {
     final entry = Entry(
       'Tighten rear brake cable',
-      'Customer bicycle',
       DateTime(2026, 10, 5, 9),
       DateTime(2026, 10, 5, 10),
       'Bike Repair',
@@ -89,7 +88,7 @@ void main() {
     final restored = Entry.fromJson(entry.toJson());
     expect(restored.task, 'Tighten rear brake cable');
     expect(restored.category, 'Bike Repair');
-    expect(restored.project, entry.project);
+
     expect(restored.start, entry.start);
     expect(restored.end, entry.end);
   });
@@ -98,24 +97,17 @@ void main() {
     final entries = [
       Entry(
         'Previous month',
-        'General',
         DateTime(2026, 9, 30, 23),
         DateTime(2026, 10, 1, 2),
         'Project Work',
       ),
       Entry(
         'This month',
-        'General',
         DateTime(2026, 10, 12, 9),
         DateTime(2026, 10, 12, 14),
       ),
-      Entry(
-        'Next month',
-        'General',
-        DateTime(2026, 10, 31, 23),
-        DateTime(2026, 11, 1, 2),
-      ),
-      Entry('Running', 'General', DateTime(2026, 10, 12, 15)),
+      Entry('Next month', DateTime(2026, 10, 31, 23), DateTime(2026, 11, 1, 2)),
+      Entry('Running', DateTime(2026, 10, 12, 15)),
     ];
     expect(monthlyTotal(entries, DateTime(2026, 10)), const Duration(hours: 8));
     expect(monthlyTotal([], DateTime(2026, 12)), Duration.zero);
@@ -127,24 +119,17 @@ void main() {
         [
           Entry(
             'Boundary task',
-            'Design',
             DateTime(2026, 9, 30, 23),
             DateTime(2026, 10, 1, 2),
             'Project Work',
           ),
           Entry(
             'Client call',
-            'Consulting',
             DateTime(2026, 10, 5, 9),
             DateTime(2026, 10, 5, 12),
           ),
-          Entry(
-            'Layout',
-            'Design',
-            DateTime(2026, 10, 6, 9),
-            DateTime(2026, 10, 6, 10),
-          ),
-          Entry('Active', 'Design', DateTime(2026, 10, 7)),
+          Entry('Layout', DateTime(2026, 10, 6, 9), DateTime(2026, 10, 6, 10)),
+          Entry('Active', DateTime(2026, 10, 7)),
         ],
         DateTime(2026, 10),
         asOf: DateTime(2026, 11),
@@ -164,143 +149,117 @@ void main() {
       expect(monthlyReport([], DateTime(2026, 10)), contains('No entries.'));
     },
   );
-  test(
-    'Excel calculates category totals and preserves legacy project information',
-    () {
-      final month = DateTime(2026, 10);
-      final entries = [
-        Entry(
-          'Overnight repair',
-          'General',
-          DateTime(2026, 10, 6, 23),
-          DateTime(2026, 10, 7, 1),
-          'Bike Repair',
-        ),
-        Entry.fromJson({
-          'task': 'Meeting',
-          'project': 'Website',
-          'start': DateTime(2026, 10, 5, 9).toIso8601String(),
-          'end': DateTime(2026, 10, 5, 10).toIso8601String(),
-        }),
-        Entry(
-          'Design task',
-          'Website',
-          DateTime(2026, 9, 30, 23),
-          DateTime(2026, 10, 1, 2),
-          'Project Work',
-        ),
-        Entry('Running', 'Other', DateTime(2026, 10, 5, 11)),
-      ];
-      final bytes = monthlyWorkbook(entries, month, asOf: DateTime(2026, 11));
-      final book = xlsx.Excel.decodeBytes(bytes);
-      expect(book.tables.keys, ['Worktime']);
-      final sheet = book['Worktime'];
-      expect(sheet.maxColumns, 6);
-      expect(sheet.rows[0][0]!.value, xlsx.TextCellValue('Worktime · 2026-10'));
-      expect(sheet.rows[1][0]!.value, xlsx.TextCellValue(''));
-      expect(
-        sheet.rows[2].map((cell) => cell?.value),
-        [
-          'Task',
-          'Category',
-          'Project',
-          'From',
-          'To',
-          'Hours worked',
-        ].map(xlsx.TextCellValue.new),
-      );
-      expect(
-        sheet.rows.sublist(3, 6).map((row) => row[0]!.value),
-        [
-          'Design task',
-          'Meeting',
-          'Overnight repair',
-        ].map(xlsx.TextCellValue.new),
-      );
-      expect(sheet.rows[3][1]!.value, xlsx.TextCellValue('Project Work'));
-      expect(sheet.rows[3][2]!.value, xlsx.TextCellValue('Website'));
-      expect(
-        sheet.rows[3][3]!.value,
-        xlsx.DateCellValue(year: 2026, month: 10, day: 1),
-      );
-      expect(
-        sheet.rows[3][4]!.value,
-        xlsx.DateTimeCellValue.fromDateTime(DateTime(2026, 10, 1, 2)),
-      );
-      expect(sheet.rows[4][1]!.value, xlsx.TextCellValue(''));
-      expect(sheet.rows[4][2]!.value, xlsx.TextCellValue('Website'));
-      expect(sheet.rows[5][1]!.value, xlsx.TextCellValue('Bike Repair'));
-      expect(sheet.rows[5][2]!.value, xlsx.TextCellValue('General'));
-      expect(
-        sheet.rows.sublist(3, 6).map((row) => numericValue(row[5]!.value)),
-        [2, 1, 2],
-      );
-      expect(sheet.rows[6][0]!.value, xlsx.TextCellValue(''));
-      expect(sheet.rows[7][0]!.value, xlsx.TextCellValue('Category totals'));
-      expect(sheet.rows[7][5]!.value, xlsx.TextCellValue('Hours worked'));
-      expect(
-        sheet.rows.sublist(8, 11).map((row) => row[0]!.value),
-        [
-          'Bike Repair',
-          'Project Work',
-          'Uncategorized',
-        ].map(xlsx.TextCellValue.new),
-      );
-      expect(numericValue(rowByLabel(sheet, 'Bike Repair')[5]!.value), 2);
-      expect(numericValue(rowByLabel(sheet, 'Project Work')[5]!.value), 2);
-      expect(numericValue(rowByLabel(sheet, 'Uncategorized')[5]!.value), 1);
-      expect(numericValue(rowByLabel(sheet, 'Total time worked')[5]!.value), 5);
-      expect(
-        sheet.rows.expand((row) => row).map((cell) => cell?.value),
-        isNot(contains(xlsx.TextCellValue('Project totals'))),
-      );
-      expect(
-        sheet.rows.expand((row) => row).map((cell) => cell?.value),
-        isNot(contains(xlsx.TextCellValue('Running'))),
-      );
-    },
-  );
+  test('Excel calculates category totals without project columns', () {
+    final month = DateTime(2026, 10);
+    final entries = [
+      Entry(
+        'Overnight repair',
+        DateTime(2026, 10, 6, 23),
+        DateTime(2026, 10, 7, 1),
+        'Bike Repair',
+      ),
+      Entry.fromJson({
+        'task': 'Meeting',
+        'project': 'Website',
+        'start': DateTime(2026, 10, 5, 9).toIso8601String(),
+        'end': DateTime(2026, 10, 5, 10).toIso8601String(),
+      }),
+      Entry(
+        'Design task',
+        DateTime(2026, 9, 30, 23),
+        DateTime(2026, 10, 1, 2),
+        'Project Work',
+      ),
+      Entry('Running', DateTime(2026, 10, 5, 11)),
+    ];
+    final bytes = monthlyWorkbook(entries, month, asOf: DateTime(2026, 11));
+    final book = xlsx.Excel.decodeBytes(bytes);
+    expect(book.tables.keys, ['Worktime']);
+    final sheet = book['Worktime'];
+    expect(sheet.maxColumns, 5);
+    expect(sheet.rows[0][0]!.value, xlsx.TextCellValue('Worktime · 2026-10'));
+    expect(sheet.rows[1][0]!.value, xlsx.TextCellValue(''));
+    expect(
+      sheet.rows[2].map((cell) => cell?.value),
+      [
+        'Task',
+        'Category',
+        'From',
+        'To',
+        'Hours worked',
+      ].map(xlsx.TextCellValue.new),
+    );
+    expect(
+      sheet.rows.sublist(3, 6).map((row) => row[0]!.value),
+      [
+        'Design task',
+        'Meeting',
+        'Overnight repair',
+      ].map(xlsx.TextCellValue.new),
+    );
+    expect(sheet.rows[3][1]!.value, xlsx.TextCellValue('Project Work'));
+    expect(
+      sheet.rows[3][2]!.value,
+      xlsx.DateCellValue(year: 2026, month: 10, day: 1),
+    );
+    expect(
+      sheet.rows[3][3]!.value,
+      xlsx.DateTimeCellValue.fromDateTime(DateTime(2026, 10, 1, 2)),
+    );
+    expect(sheet.rows[4][1]!.value, xlsx.TextCellValue('Uncategorized'));
+    expect(sheet.rows[5][1]!.value, xlsx.TextCellValue('Bike Repair'));
+    expect(sheet.rows.sublist(3, 6).map((row) => numericValue(row[4]!.value)), [
+      2,
+      1,
+      2,
+    ]);
+    expect(sheet.rows[6][0]!.value, xlsx.TextCellValue(''));
+    expect(sheet.rows[7][0]!.value, xlsx.TextCellValue('Category totals'));
+    expect(sheet.rows[7][4]!.value, xlsx.TextCellValue('Hours worked'));
+    expect(
+      sheet.rows.sublist(8, 11).map((row) => row[0]!.value),
+      [
+        'Bike Repair',
+        'Project Work',
+        'Uncategorized',
+      ].map(xlsx.TextCellValue.new),
+    );
+    expect(numericValue(rowByLabel(sheet, 'Bike Repair')[4]!.value), 2);
+    expect(numericValue(rowByLabel(sheet, 'Project Work')[4]!.value), 2);
+    expect(numericValue(rowByLabel(sheet, 'Uncategorized')[4]!.value), 1);
+    expect(numericValue(rowByLabel(sheet, 'Total time worked')[4]!.value), 5);
+    expect(
+      sheet.rows.expand((row) => row).map((cell) => cell?.value),
+      isNot(contains(xlsx.TextCellValue('Project totals'))),
+    );
+    expect(
+      sheet.rows.expand((row) => row).map((cell) => cell?.value),
+      isNot(contains(xlsx.TextCellValue('Running'))),
+    );
+  });
 
   test('Excel clips both month boundaries and excludes invalid sessions', () {
     final month = DateTime(2026, 10);
     final entries = [
       Entry(
         'Start boundary',
-        'Client',
         DateTime(2026, 9, 30, 23),
         DateTime(2026, 10, 1, 2),
       ),
       Entry(
         'End boundary',
-        'Client',
         DateTime(2026, 10, 31, 23),
         DateTime(2026, 11, 1, 2),
       ),
-      Entry(
-        'Before month',
-        'Client',
-        DateTime(2026, 9, 30, 23),
-        DateTime(2026, 10, 1),
-      ),
-      Entry(
-        'After month',
-        'Client',
-        DateTime(2026, 11, 1),
-        DateTime(2026, 11, 1, 1),
-      ),
+      Entry('Before month', DateTime(2026, 9, 30, 23), DateTime(2026, 10, 1)),
+      Entry('After month', DateTime(2026, 11, 1), DateTime(2026, 11, 1, 1)),
       Entry(
         'Zero duration',
-        'Client',
         DateTime(2026, 10, 3, 9),
         DateTime(2026, 10, 3, 9),
       ),
-      Entry(
-        'Reversed',
-        'Client',
-        DateTime(2026, 10, 4, 10),
-        DateTime(2026, 10, 4, 9),
-      ),
-      Entry('Running', 'Client', DateTime(2026, 10, 5)),
+      Entry('Reversed', DateTime(2026, 10, 4, 10), DateTime(2026, 10, 4, 9)),
+      Entry('Running', DateTime(2026, 10, 5)),
     ];
     final sheet = xlsx.Excel.decodeBytes(
       monthlyWorkbook(entries, month),
@@ -310,17 +269,17 @@ void main() {
       ['Start boundary', 'End boundary'].map(xlsx.TextCellValue.new),
     );
     expect(
-      sheet.rows[3][3]!.value,
+      sheet.rows[3][2]!.value,
       xlsx.DateCellValue(year: 2026, month: 10, day: 1),
     );
     expect(
-      sheet.rows[4][4]!.value,
+      sheet.rows[4][3]!.value,
       xlsx.DateCellValue(year: 2026, month: 11, day: 1),
     );
-    expect(numericValue(sheet.rows[3][5]!.value), 2);
-    expect(numericValue(sheet.rows[4][5]!.value), 1);
-    expect(numericValue(rowByLabel(sheet, 'Uncategorized')[5]!.value), 3);
-    expect(numericValue(rowByLabel(sheet, 'Total time worked')[5]!.value), 3);
+    expect(numericValue(sheet.rows[3][4]!.value), 2);
+    expect(numericValue(sheet.rows[4][4]!.value), 1);
+    expect(numericValue(rowByLabel(sheet, 'Uncategorized')[4]!.value), 3);
+    expect(numericValue(rowByLabel(sheet, 'Total time worked')[4]!.value), 3);
     final values = sheet.rows.expand((row) => row).map((cell) => cell?.value);
     for (final task in [
       'Before month',
@@ -344,7 +303,6 @@ void main() {
       [
         'Task',
         'Category',
-        'Project',
         'From',
         'To',
         'Hours worked',
@@ -353,7 +311,7 @@ void main() {
     expect(sheet.rows[3][0]!.value, xlsx.TextCellValue(''));
     expect(sheet.rows[4][0]!.value, xlsx.TextCellValue('Category totals'));
     expect(sheet.rows[5][0]!.value, xlsx.TextCellValue('Total time worked'));
-    expect(numericValue(sheet.rows[5][5]!.value), 0);
+    expect(numericValue(sheet.rows[5][4]!.value), 0);
     expect(sheet.maxRows, 6);
   });
 
@@ -395,7 +353,6 @@ void main() {
     final entries = [
       Entry(
         'Finished task',
-        'Saved project',
         DateTime(2026, 10, 5, 9),
         DateTime(2026, 10, 5, 10, 30),
         'Project Work',
@@ -420,7 +377,7 @@ void main() {
     );
     expect(
       numericValue(
-        rowByLabel(prepared['Worktime'], 'Total time worked')[5]!.value,
+        rowByLabel(prepared['Worktime'], 'Total time worked')[4]!.value,
       ),
       1.5,
     );

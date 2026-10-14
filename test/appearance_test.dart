@@ -19,13 +19,11 @@ void main() {
     final now = DateTime.now();
     final completed = Entry(
       'Completed task',
-      'Existing project',
       now.subtract(const Duration(hours: 2)),
       now.subtract(const Duration(hours: 1)),
     );
     final running = Entry(
       'Working task',
-      'Current project',
       now.subtract(const Duration(minutes: 5)),
     );
     final savedWork = jsonEncode({
@@ -84,7 +82,7 @@ void main() {
     expect(entries, hasLength(2));
     expect(entries.first, completed.toJson());
     expect(entries.last['task'], running.task);
-    expect(entries.last['project'], running.project);
+    expect(entries.last.containsKey('project'), isFalse);
     expect(entries.last['start'], running.start.toIso8601String());
     expect(entries.last['end'], isNotNull);
     expect(currentFont(tester), 'JetBrains Mono');

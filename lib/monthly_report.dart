@@ -11,8 +11,6 @@ String _period(DateTime d) => '${d.year}-${_two(d.month)}';
 String _date(DateTime d) => '${_two(d.day)}.${_two(d.month)}.${d.year}';
 String _stamp(DateTime d) => '${_date(d)} ${_two(d.hour)}:${_two(d.minute)}';
 double _decimal(Duration d) => d.inMicroseconds / 3600000000;
-bool _legacyProject(Entry e) =>
-    e.project.trim().isNotEmpty && e.project.trim() != 'General';
 String _clean(String value) => value.replaceAll(RegExp(r'[\r\n\t|]+'), ' ');
 
 String _review(AnalyzedEntry row) => [
@@ -72,8 +70,7 @@ String monthlyReportFromAnalysis(
   ...a.rows.map(
     (r) =>
         '${_clean(r.entry.task)} | ${_clean(r.category)} | ${_stamp(r.start)} | ${_stamp(r.end)} | ${hours(r.duration)}'
-        '${_review(r).isEmpty ? '' : ' · ${_review(r)}'}'
-        '${_legacyProject(r.entry) ? ' · Legacy project: ${_clean(r.entry.project)}' : ''}',
+        '${_review(r).isEmpty ? '' : ' · ${_review(r)}'}',
   ),
   '',
   'Completed sessions only. Times are clipped to the selected month; daily and weekly totals split at local midnight. Overlapping sessions remain in recorded totals.',
@@ -98,25 +95,17 @@ Uint8List monthlyWorkbookFromAnalysis(
   sheet.appendRow([_text('Worktime · ${_period(analysis.month)}')]);
   sheet.appendRow([_text('')]);
   sheet.appendRow(
-    [
-      'Task',
-      'Category',
-      'Project',
-      'From',
-      'To',
-      'Hours worked',
-    ].map(_text).toList(),
+    ['Task', 'Category', 'From', 'To', 'Hours worked'].map(_text).toList(),
   );
   for (final row in analysis.rows) {
     sheet.appendRow([
       _text(row.entry.task),
-      _text(row.entry.category ?? ''),
-      _text(row.entry.project),
+      _text(row.category),
       xlsx.DateTimeCellValue.fromDateTime(row.start),
       xlsx.DateTimeCellValue.fromDateTime(row.end),
       xlsx.DoubleCellValue(_decimal(row.duration)),
     ]);
-    for (final col in [3, 4]) {
+    for (final col in [2, 3]) {
       sheet
           .cell(
             xlsx.CellIndex.indexByColumnRow(
@@ -138,13 +127,11 @@ Uint8List monthlyWorkbookFromAnalysis(
     null,
     null,
     null,
-    null,
     _text('Hours worked'),
   ]);
   for (final category in analysis.categories) {
     sheet.appendRow([
       _text(category.category),
-      null,
       null,
       null,
       null,
@@ -157,12 +144,11 @@ Uint8List monthlyWorkbookFromAnalysis(
     null,
     null,
     null,
-    null,
     xlsx.DoubleCellValue(_decimal(analysis.total)),
   ]);
   for (var row = 3; row <= totalRow; row++) {
     final cell = sheet.cell(
-      xlsx.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row),
+      xlsx.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row),
     );
     if (cell.value is xlsx.DoubleCellValue) {
       cell.cellStyle = xlsx.CellStyle(
@@ -180,7 +166,7 @@ Uint8List monthlyWorkbookFromAnalysis(
       final row = sheet.maxRows - 1;
       sheet.merge(
         xlsx.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row),
-        xlsx.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row),
+        xlsx.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row),
       );
       sheet.setRowHeight(row, 30);
       for (final col in [0, 1]) {
@@ -210,7 +196,7 @@ Uint8List monthlyWorkbookFromAnalysis(
 
   for (var row = 0; row < sheet.maxRows; row++) {
     sheet.setRowHeight(row, 28);
-    for (var col = 0; col < 6; col++) {
+    for (var col = 0; col < 5; col++) {
       final cell = sheet.cell(
         xlsx.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row),
       );
@@ -218,15 +204,15 @@ Uint8List monthlyWorkbookFromAnalysis(
         bottomBorderVal: row >= 3 && row < categoryHeader - 1 ? rule : null,
         fontFamilyVal: 'Calibri',
         fontSizeVal: 11,
-        fontColorHexVal: col == 3 || col == 4 ? muted : ink,
+        fontColorHexVal: col == 2 || col == 3 ? muted : ink,
         verticalAlignVal: xlsx.VerticalAlign.Center,
-        horizontalAlignVal: col == 5
+        horizontalAlignVal: col == 4
             ? xlsx.HorizontalAlign.Right
             : xlsx.HorizontalAlign.Left,
         backgroundColorHexVal: row >= 3 && row < categoryHeader - 1 && row.isOdd
             ? pale
             : white,
-        textWrappingVal: col <= 2
+        textWrappingVal: col <= 1
             ? xlsx.TextWrapping.WrapText
             : xlsx.TextWrapping.Clip,
       );
@@ -243,14 +229,13 @@ Uint8List monthlyWorkbookFromAnalysis(
       final lineCount = [
         lines(entry.task, 38),
         lines(entry.category ?? '', 26),
-        lines(entry.project, 26),
       ].reduce((a, b) => a > b ? a : b);
       sheet.setRowHeight(row, (lineCount * 15 + 14).toDouble());
     }
   }
   sheet.merge(
     xlsx.CellIndex.indexByString('A1'),
-    xlsx.CellIndex.indexByString('F1'),
+    xlsx.CellIndex.indexByString('E1'),
   );
   sheet.setRowHeight(0, 48);
   sheet.setRowHeight(1, 12);
@@ -258,7 +243,7 @@ Uint8List monthlyWorkbookFromAnalysis(
   for (final row in headers) {
     final dark = row == 0 || row == 2;
     sheet.setRowHeight(row, row == 0 ? 48 : 34);
-    for (var col = 0; col < 6; col++) {
+    for (var col = 0; col < 5; col++) {
       final cell = sheet.cell(
         xlsx.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row),
       );
@@ -278,11 +263,11 @@ Uint8List monthlyWorkbookFromAnalysis(
   for (var row = categoryHeader; row <= totalRow; row++) {
     sheet.merge(
       xlsx.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
-      xlsx.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row),
+      xlsx.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row),
     );
   }
   // Strong grand total, restrained category section, and readable bank footer.
-  for (var col = 0; col < 6; col++) {
+  for (var col = 0; col < 5; col++) {
     final cell = sheet.cell(
       xlsx.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: totalRow),
     );
@@ -296,7 +281,7 @@ Uint8List monthlyWorkbookFromAnalysis(
   sheet.setRowHeight(totalRow, 40);
   for (var row = categoryHeader + 1; row < totalRow; row++) {
     sheet.setRowHeight(row, 30);
-    for (final col in [0, 5]) {
+    for (final col in [0, 4]) {
       final cell = sheet.cell(
         xlsx.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row),
       );
@@ -309,7 +294,7 @@ Uint8List monthlyWorkbookFromAnalysis(
     final bankHeader = headers.last;
     sheet.merge(
       xlsx.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: bankHeader),
-      xlsx.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: bankHeader),
+      xlsx.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: bankHeader),
     );
     sheet.setRowHeight(bankHeader - 1, 18);
     for (var row = bankHeader + 1; row < sheet.maxRows; row++) {
@@ -338,11 +323,10 @@ Uint8List monthlyWorkbookFromAnalysis(
   }
   sheet.setColumnWidth(0, 42);
   sheet.setColumnWidth(1, 30);
-  sheet.setColumnWidth(2, 30);
-  for (final col in [3, 4]) {
+  for (final col in [2, 3]) {
     sheet.setColumnWidth(col, 24);
   }
-  sheet.setColumnWidth(5, 20);
+  sheet.setColumnWidth(4, 20);
   book.setDefaultSheet('Worktime');
   return Uint8List.fromList(book.encode()!);
 }

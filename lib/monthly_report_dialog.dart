@@ -53,7 +53,11 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
     try {
       if (savedPath == null) {
         final directory = await getApplicationDocumentsDirectory();
-        final path = '${directory.path}/${widget.filename}';
+        // A distinct path prevents spreadsheet apps from reusing an older
+        // workbook that is still open under the monthly filename.
+        final stem = widget.filename.replaceFirst(RegExp(r'\.xlsx$'), '');
+        final path =
+            '${directory.path}/$stem-${DateTime.now().microsecondsSinceEpoch}.xlsx';
         await workbook.saveTo(path);
         savedPath = path;
       }

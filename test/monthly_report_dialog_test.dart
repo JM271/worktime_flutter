@@ -40,7 +40,6 @@ void main() {
   final entries = [
     Entry(
       'Client work',
-      'Website',
       DateTime(2026, 10, 12, 9),
       DateTime(2026, 10, 12, 11),
       'Bike Repair',
@@ -132,7 +131,6 @@ void main() {
         'entries': [
           Entry(
             'Current task',
-            'General',
             DateTime(now.year, now.month, 1, 9),
             DateTime(now.year, now.month, 1, 11),
           ).toJson(),
@@ -166,45 +164,78 @@ void main() {
     expect(shareCalls, 0);
   });
 
-  testWidgets('Open Excel saves a readable workbook before launching it', (
-    tester,
-  ) async {
-    late Completer<String> opened;
-    await showReport(tester, (path) async {
-      opened.complete(path);
-      return OpenResult();
-    }, bankDetails: bankDetails);
-    late String path;
-    await tester.runAsync(() async {
-      opened = Completer<String>();
-      await tester.tap(find.text('Open Excel'));
-      path = await opened.future.timeout(const Duration(seconds: 5));
-    });
-    await tester.pumpAndSettle();
-    expect(path, '${directory.path}/worktime-2026-10.xlsx');
-    final bytes = await tester.runAsync(() => File(path).readAsBytes());
-    final book = xlsx.Excel.decodeBytes(bytes!);
-    expect(book.tables.keys, ['Worktime']);
-    final sheet = book['Worktime'];
-    expect(sheet.rows[3][0]!.value, xlsx.TextCellValue('Client work'));
-    expect(sheet.rows[3][1]!.value, xlsx.TextCellValue('Bike Repair'));
-    expect(sheet.rows[3][2]!.value, xlsx.TextCellValue('Website'));
-    final total = sheet.rows.firstWhere(
-      (row) => row.first?.value == xlsx.TextCellValue('Total time worked'),
-    );
-    expect(total[5]!.value, xlsx.IntCellValue(2));
-    final account = sheet.rows.firstWhere(
-      (row) => row.first?.value == xlsx.TextCellValue('IBAN / Account number'),
-    );
-    expect(account[1]!.value, xlsx.TextCellValue('001234567890'));
-    expect(find.text('Monthly report'), findsOneWidget);
-    expect(
-      tester
-          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Open Excel'))
-          .onPressed,
-      isNotNull,
-    );
-  });
+  testWidgets(
+    'Open Excel opens a fresh category workbook beside an old report',
+    (tester) async {
+      final previous = xlsx.Excel.createExcel();
+      previous['Sheet1'].appendRow([xlsx.TextCellValue('Project')]);
+      final previousPath = '${directory.path}/worktime-2026-10.xlsx';
+      await tester.runAsync(
+        () => File(previousPath).writeAsBytes(previous.encode()!),
+      );
+      late Completer<String> opened;
+      await showReport(tester, (path) async {
+        opened.complete(path);
+        return OpenResult();
+      }, bankDetails: bankDetails);
+      late String path;
+      await tester.runAsync(() async {
+        opened = Completer<String>();
+        await tester.tap(find.text('Open Excel'));
+        path = await opened.future.timeout(const Duration(seconds: 5));
+      });
+      await tester.pumpAndSettle();
+      expect(path, startsWith('${directory.path}/worktime-2026-10-'));
+      expect(path, endsWith('.xlsx'));
+      expect(path, isNot(previousPath));
+      final bytes = await tester.runAsync(() => File(path).readAsBytes());
+      final book = xlsx.Excel.decodeBytes(bytes!);
+      expect(book.tables.keys, ['Worktime']);
+      final sheet = book['Worktime'];
+      expect(
+        sheet.rows[2].map((cell) => cell?.value),
+        [
+          'Task',
+          'Category',
+          'From',
+          'To',
+          'Hours worked',
+        ].map(xlsx.TextCellValue.new),
+      );
+      expect(
+        sheet.rows.expand((row) => row).map((cell) => cell?.value),
+        isNot(contains(xlsx.TextCellValue('Project'))),
+      );
+      expect(
+        sheet.rows.expand((row) => row).map((cell) => cell?.value),
+        isNot(contains(xlsx.TextCellValue('Project totals'))),
+      );
+      expect(sheet.rows[3][0]!.value, xlsx.TextCellValue('Client work'));
+      expect(sheet.rows[3][1]!.value, xlsx.TextCellValue('Bike Repair'));
+      expect(
+        sheet.rows[3][2]!.value,
+        xlsx.DateTimeCellValue.fromDateTime(DateTime(2026, 10, 12, 9)),
+      );
+      final total = sheet.rows.firstWhere(
+        (row) => row.first?.value == xlsx.TextCellValue('Total time worked'),
+      );
+      expect(total[4]!.value, xlsx.IntCellValue(2));
+      final account = sheet.rows.firstWhere(
+        (row) =>
+            row.first?.value == xlsx.TextCellValue('IBAN / Account number'),
+      );
+      expect(account[1]!.value, xlsx.TextCellValue('001234567890'));
+      expect(find.text('Monthly report'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Open Excel'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
 
   testWidgets(
     'No spreadsheet app keeps the report and allows sharing the same workbook',

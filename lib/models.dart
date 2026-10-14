@@ -1,19 +1,17 @@
 class Entry {
-  final String task, project;
+  final String task;
   final String? category;
   final DateTime start;
   final DateTime? end;
-  Entry(this.task, this.project, this.start, [this.end, this.category]);
+  Entry(this.task, this.start, [this.end, this.category]);
   Map<String, dynamic> toJson() => {
     'task': task,
-    'project': project,
     if (category != null) 'category': category,
     'start': start.toIso8601String(),
     'end': end?.toIso8601String(),
   };
   factory Entry.fromJson(Map<String, dynamic> j) => Entry(
     j['task'],
-    j['project'],
     DateTime.parse(j['start']),
     j['end'] == null ? null : DateTime.parse(j['end']),
     j['category'] as String?,

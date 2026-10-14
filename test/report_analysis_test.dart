@@ -8,21 +8,18 @@ void main() {
       [
         Entry(
           'Carry-in',
-          'General',
           DateTime(2026, 9, 30, 23),
           DateTime(2026, 10, 1, 2),
           'Project Work',
         ),
         Entry(
           'Overnight repair',
-          'General',
           DateTime(2026, 10, 1, 23),
           DateTime(2026, 10, 2, 1),
           'Bike Repair',
         ),
         Entry(
           'Carry-out',
-          'General',
           DateTime(2026, 10, 31, 23),
           DateTime(2026, 11, 1, 2),
           'Bike Repair',
@@ -77,20 +74,17 @@ void main() {
       [
         Entry(
           'Primary session',
-          'General',
           DateTime(2026, 10, 5, 9),
           DateTime(2026, 10, 5, 12),
           'Bike Build',
         ),
         Entry(
           'Second session',
-          'General',
           DateTime(2026, 10, 5, 10),
           DateTime(2026, 10, 5, 11),
         ),
         Entry(
           'Third session',
-          'General',
           DateTime(2026, 10, 5, 10, 30),
           DateTime(2026, 10, 5, 12, 30),
           '  ',
@@ -118,21 +112,18 @@ void main() {
         [
           Entry(
             'Valid task',
-            'General',
             DateTime(2026, 10, 5, 9),
             DateTime(2026, 10, 5, 10),
             'Administration',
           ),
-          Entry('Running', 'General', DateTime(2026, 10, 5, 10)),
+          Entry('Running', DateTime(2026, 10, 5, 10)),
           Entry(
             'Zero duration',
-            'General',
             DateTime(2026, 10, 5, 11),
             DateTime(2026, 10, 5, 11),
           ),
           Entry(
             'Reversed dates',
-            'General',
             DateTime(2026, 10, 6, 12),
             DateTime(2026, 10, 6, 9),
           ),
@@ -156,7 +147,6 @@ void main() {
       [
         Entry(
           'Check forgotten timer',
-          'General',
           DateTime(2026, 9, 30, 12),
           DateTime(2026, 10, 1, 1),
           'Project Work',
@@ -175,42 +165,36 @@ void main() {
     final entries = [
       Entry(
         'October early',
-        'General',
         DateTime(2026, 10, 2, 9),
         DateTime(2026, 10, 2, 11),
         'Bike Build',
       ),
       Entry(
         'October cutoff',
-        'General',
         DateTime(2026, 10, 12, 11),
         DateTime(2026, 10, 12, 13),
         'Bike Build',
       ),
       Entry(
         'October later',
-        'General',
         DateTime(2026, 10, 20, 9),
         DateTime(2026, 10, 20, 15),
         'Bike Build',
       ),
       Entry(
         'September early',
-        'General',
         DateTime(2026, 9, 2, 9),
         DateTime(2026, 9, 2, 11),
         'Bike Build',
       ),
       Entry(
         'September cutoff',
-        'General',
         DateTime(2026, 9, 12, 11),
         DateTime(2026, 9, 12, 13),
         'Bike Build',
       ),
       Entry(
         'September later',
-        'General',
         DateTime(2026, 9, 20, 9),
         DateTime(2026, 9, 20, 17),
         'Bike Build',
@@ -259,14 +243,12 @@ void main() {
       [
         Entry(
           'Previous month end',
-          'General',
           DateTime(2026, 2, 28, 22),
           DateTime(2026, 3, 1, 2),
           'Project Work',
         ),
         Entry(
           'Current month',
-          'General',
           DateTime(2026, 3, 30, 9),
           DateTime(2026, 3, 30, 10),
           'Project Work',
@@ -286,7 +268,6 @@ void main() {
     () {
       final entry = Entry(
         'October work',
-        'General',
         DateTime(2026, 10, 5, 9),
         DateTime(2026, 10, 5, 11),
         'Prospection',

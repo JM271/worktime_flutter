@@ -11,13 +11,12 @@ void main() {
       [
         Entry(
           'Repair',
-          'Client',
           DateTime(2026, 10, 12, 9),
           DateTime(2026, 10, 12, 11),
           'Bike Repair',
         ),
       ],
-      Entry('Active', 'Other', DateTime(2026, 10, 13, 10)),
+      Entry('Active', DateTime(2026, 10, 13, 10)),
       const BankDetails(accountNumber: '001234'),
     );
     final restored = WorktimeBackup.decode(original.encode());

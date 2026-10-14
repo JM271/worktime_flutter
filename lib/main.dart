@@ -175,7 +175,6 @@ class _TrackerState extends State<Tracker> {
         entries.add(
           Entry(
             running!.task,
-            running!.project,
             running!.start,
             DateTime.now(),
             running!.category,
@@ -185,7 +184,6 @@ class _TrackerState extends State<Tracker> {
       } else {
         running = Entry(
           task.text.trim(),
-          'General',
           DateTime.now(),
           null,
           selectedCategory,
@@ -1019,7 +1017,7 @@ class _TrackerState extends State<Tracker> {
                               ),
                               const SizedBox(height: 14),
                               const Text(
-                                'Review completed entries, project totals and bank details in Excel.',
+                                'Review completed entries, category totals and bank details in Excel.',
                                 style: TextStyle(
                                   color: AppColors.muted,
                                   fontSize: 13,
@@ -1247,7 +1245,7 @@ class _ManualEntryState extends State<ManualEntry> {
               }
               Navigator.pop(
                 context,
-                Entry(task.text.trim(), 'General', a, b, selectedCategory),
+                Entry(task.text.trim(), a, b, selectedCategory),
               );
             },
             child: const Padding(

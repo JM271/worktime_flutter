@@ -41,7 +41,6 @@ void main() {
             'entries': [
               Entry(
                 'Clean the delivery van and workshop',
-                'Bike workshop',
                 DateTime(now.year, now.month, now.day, 9),
                 DateTime(now.year, now.month, now.day, 11),
                 'Clean Workshop & Vehicles',
