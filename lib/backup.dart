@@ -1,14 +1,23 @@
 import 'dart:convert';
 
 import 'models.dart';
+import 'expenses.dart';
 import 'bank_details.dart';
 
 class WorktimeBackup {
-  WorktimeBackup(this.entries, this.running, this.bankDetails);
+  WorktimeBackup(
+    this.entries,
+    this.running,
+    this.bankDetails, [
+    this.expenses = const [],
+  ]);
+  final List<Expense> expenses;
   final List<Entry> entries;
   final Entry? running;
   final BankDetails bankDetails;
   Map<String, dynamic> get data => {
+    if (expenses.isNotEmpty)
+      'expenses': expenses.map((e) => e.toJson()).toList(),
     'entries': entries.map((e) => e.toJson()).toList(),
     'running': running?.toJson(),
     'bankDetails': bankDetails.toJson(),
@@ -45,7 +54,10 @@ class WorktimeBackup {
       final bank = BankDetails.fromJson(
         Map<String, dynamic>.from(data['bankDetails'] as Map),
       );
-      return WorktimeBackup(entries, running, bank);
+      final expenses = (data['expenses'] as List? ?? [])
+          .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+      return WorktimeBackup(entries, running, bank, expenses);
     } on FormatException {
       rethrow;
     } catch (_) {

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:excel/excel.dart' as xlsx;
 
 import 'models.dart';
+import 'expenses.dart';
 import 'report_analysis.dart';
 import 'bank_details.dart';
 
@@ -25,14 +26,17 @@ String monthlyReport(
   DateTime month, {
   DateTime? asOf,
   BankDetails bankDetails = const BankDetails(),
+  List<Expense> expenses = const [],
 }) => monthlyReportFromAnalysis(
   MonthlyAnalysis(entries, month, asOf: asOf),
   bankDetails: bankDetails,
+  expenses: expenses,
 );
 
 String monthlyReportFromAnalysis(
   MonthlyAnalysis a, {
   BankDetails bankDetails = const BankDetails(),
+  List<Expense> expenses = const [],
 }) => [
   _period(a.month),
   'Generated: ${_stamp(a.asOf)} (local time)',
@@ -43,6 +47,15 @@ String monthlyReportFromAnalysis(
   'Average active day: ${hours(a.averageActiveDay)}',
   'Longest session in month: ${hours(a.longestSession)}',
   '',
+  if (expensesForMonth(expenses, a.month).isNotEmpty) ...[
+    'Spesen',
+    ...expensesForMonth(expenses, a.month).map(
+      (e) =>
+          '${_date(e.date)} | ${_clean(e.description)} | ${expenseAmount(e.cents)}',
+    ),
+    'Total Spesen: ${expenseAmount(expensesForMonth(expenses, a.month).fold<int>(0, (sum, e) => sum + e.cents))}',
+    '',
+  ],
   'Category totals',
   ...a.categories.map(
     (c) =>
@@ -81,14 +94,17 @@ Uint8List monthlyWorkbook(
   DateTime month, {
   DateTime? asOf,
   BankDetails bankDetails = const BankDetails(),
+  List<Expense> expenses = const [],
 }) => monthlyWorkbookFromAnalysis(
   MonthlyAnalysis(entries, month, asOf: asOf),
   bankDetails: bankDetails,
+  expenses: expenses,
 );
 
 Uint8List monthlyWorkbookFromAnalysis(
   MonthlyAnalysis analysis, {
   BankDetails bankDetails = const BankDetails(),
+  List<Expense> expenses = const [],
 }) {
   final book = xlsx.Excel.createExcel()..rename('Sheet1', 'Worktime');
   final sheet = book['Worktime'];
@@ -327,6 +343,51 @@ Uint8List monthlyWorkbookFromAnalysis(
     sheet.setColumnWidth(col, 24);
   }
   sheet.setColumnWidth(4, 20);
+  final monthExpenses = expensesForMonth(expenses, analysis.month);
+  if (monthExpenses.isNotEmpty) {
+    sheet.appendRow([_text('')]);
+    sheet.appendRow([
+      _text('Spesen'),
+      _text('Datum'),
+      null,
+      null,
+      _text('Betrag (CHF)'),
+    ]);
+    for (final expense in monthExpenses) {
+      sheet.appendRow([
+        _text(expense.description),
+        _text(_date(expense.date)),
+        null,
+        null,
+        xlsx.DoubleCellValue(expense.cents / 100),
+      ]);
+    }
+    sheet.appendRow([
+      _text('Total Spesen'),
+      null,
+      null,
+      null,
+      xlsx.DoubleCellValue(
+        monthExpenses.fold<int>(0, (sum, e) => sum + e.cents) / 100,
+      ),
+    ]);
+    for (
+      var row = sheet.maxRows - monthExpenses.length - 1;
+      row < sheet.maxRows;
+      row++
+    ) {
+      sheet
+          .cell(xlsx.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row))
+          .cellStyle = xlsx.CellStyle(
+        numberFormat: xlsx.CustomNumericNumFormat(formatCode: '0.00'),
+      );
+      sheet
+          .cell(xlsx.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          .cellStyle = xlsx.CellStyle(
+        textWrapping: xlsx.TextWrapping.WrapText,
+      );
+    }
+  }
   book.setDefaultSheet('Worktime');
   return Uint8List.fromList(book.encode()!);
 }

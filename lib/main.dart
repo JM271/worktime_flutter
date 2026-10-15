@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 
 import 'backup.dart';
+import 'expenses.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -58,6 +59,7 @@ class Tracker extends StatefulWidget {
 class _TrackerState extends State<Tracker> {
   final task = TextEditingController();
   List<Entry> entries = [];
+  List<Expense> expenses = [];
   Entry? running;
   Timer? ticker;
   SharedPreferences? prefs;
@@ -68,7 +70,7 @@ class _TrackerState extends State<Tracker> {
   bool backupBusy = false;
   String? confirmedBackup;
   String get currentBackupData =>
-      jsonEncode(WorktimeBackup(entries, running, bankDetails).data);
+      jsonEncode(WorktimeBackup(entries, running, bankDetails, expenses).data);
   String get backupStatus => confirmedBackup == null
       ? 'No confirmed backup'
       : confirmedBackup == currentBackupData
@@ -90,6 +92,9 @@ class _TrackerState extends State<Tracker> {
     try {
       final raw = jsonDecode(prefs!.getString('worktime') ?? '{"entries":[]}');
       entries = (raw['entries'] as List).map((e) => Entry.fromJson(e)).toList();
+      expenses = (raw['expenses'] as List? ?? [])
+          .map((e) => Expense.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
       if (raw['bankDetails'] is Map<String, dynamic>) {
         bankDetails = BankDetails.fromJson(raw['bankDetails']);
       }
@@ -113,6 +118,7 @@ class _TrackerState extends State<Tracker> {
       final ok = await prefs!.setString(
         'worktime',
         jsonEncode({
+          'expenses': expenses.map((e) => e.toJson()).toList(),
           'entries': entries.map((e) => e.toJson()).toList(),
           'running': running?.toJson(),
           'bankDetails': bankDetails.toJson(),
@@ -206,6 +212,47 @@ class _TrackerState extends State<Tracker> {
     }
   }
 
+  Future<void> editExpense([Expense? existing]) async {
+    final result = await showModalBottomSheet<Expense>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => ExpenseEditor(expense: existing),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      if (existing == null) {
+        expenses.add(result);
+      } else {
+        expenses[expenses.indexOf(existing)] = result;
+      }
+    });
+    await save();
+  }
+
+  Future<void> deleteExpense(Expense expense) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Spesen löschen?'),
+        content: Text(expense.description),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Löschen'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => expenses.remove(expense));
+    await save();
+  }
+
   Future<void> remove(Entry e) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -252,10 +299,12 @@ class _TrackerState extends State<Tracker> {
       final report = monthlyReportFromAnalysis(
         analysis,
         bankDetails: bankDetails,
+        expenses: expenses,
       );
       final bytes = monthlyWorkbookFromAnalysis(
         analysis,
         bankDetails: bankDetails,
+        expenses: expenses,
       );
       await showDialog<void>(
         context: context,
@@ -264,6 +313,7 @@ class _TrackerState extends State<Tracker> {
           filename: filename,
           bytes: bytes,
           analysis: analysis,
+          expenses: expenses,
           bankDetails: bankDetails,
         ),
       );
@@ -312,7 +362,12 @@ class _TrackerState extends State<Tracker> {
         ),
       );
       if (proceed != true || !mounted) return;
-      final snapshot = WorktimeBackup(List.of(entries), running, bankDetails);
+      final snapshot = WorktimeBackup(
+        List.of(entries),
+        running,
+        bankDetails,
+        List.of(expenses),
+      );
       final snapshotData = jsonEncode(snapshot.data);
       final text = snapshot.encode();
       final box = context.findRenderObject() as RenderBox?;
@@ -387,7 +442,7 @@ class _TrackerState extends State<Tracker> {
         builder: (c) => AlertDialog(
           title: const Text('Restore backup?'),
           content: Text(
-            'Replace current data with ${backup.entries.length} completed entries, ${backup.running == null ? "no active timer" : "one active timer"}, and saved bank details? A recovery copy of your current data will be kept on this device.',
+            'Replace current data with ${backup.entries.length} completed entries, ${backup.running == null ? "no active timer" : "one active timer"}, ${backup.expenses.length} expenses, and saved bank details? A recovery copy of your current data will be kept on this device.',
           ),
           actions: [
             TextButton(
@@ -415,6 +470,7 @@ class _TrackerState extends State<Tracker> {
       if (!mounted) return;
       setState(() {
         entries = backup.entries;
+        expenses = backup.expenses;
         running = backup.running;
         bankDetails = backup.bankDetails;
         task.text = running?.task ?? '';
@@ -1006,6 +1062,49 @@ class _TrackerState extends State<Tracker> {
                           ),
                         ),
                         AppPanel(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              sectionTitle(
+                                'SPESEN',
+                                'Spesen',
+                                Icons.receipt_long_outlined,
+                              ),
+                              const SizedBox(height: 16),
+                              FilledButton.tonalIcon(
+                                onPressed: () => editExpense(),
+                                icon: const Icon(Icons.add),
+                                label: const Text('Spesen erfassen'),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Diesen Monat: ${expenseAmount(expensesForMonth(expenses, DateTime.now()).fold<int>(0, (sum, e) => sum + e.cents))}',
+                              ),
+                              if (expenses.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 16),
+                                  child: Text('Noch keine Spesen erfasst.'),
+                                ),
+                              for (final expense in (List<Expense>.of(
+                                expenses,
+                              )..sort((a, b) => b.date.compareTo(a.date))))
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(expense.description),
+                                  subtitle: Text(
+                                    '${MaterialLocalizations.of(context).formatShortDate(expense.date)} · ${expenseAmount(expense.cents)}',
+                                  ),
+                                  onTap: () => editExpense(expense),
+                                  trailing: IconButton(
+                                    tooltip: 'Spesen löschen',
+                                    icon: const Icon(Icons.delete_outline),
+                                    onPressed: () => deleteExpense(expense),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        AppPanel(
                           accent: AppColors.lime,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1059,7 +1158,7 @@ class _TrackerState extends State<Tracker> {
                               ),
                               const SizedBox(height: 14),
                               const Text(
-                                'Tap Back up to Google Drive, then choose Drive in the share menu and save the file. To restore, choose Drive in the file picker and select your backup. Includes entries, your active timer and bank details.',
+                                'Tap Back up to Google Drive, then choose Drive in the share menu and save the file. To restore, choose Drive in the file picker and select your backup. Includes entries, expenses, your active timer and bank details.',
                               ),
                               const SizedBox(height: 16),
                               FilledButton.tonalIcon(

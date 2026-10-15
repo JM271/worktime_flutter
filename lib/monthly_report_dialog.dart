@@ -1,3 +1,5 @@
+import 'expenses.dart';
+
 import 'dart:typed_data';
 import 'dart:math' as math;
 
@@ -23,10 +25,12 @@ class MonthlyReportDialog extends StatefulWidget {
     required this.filename,
     required this.bytes,
     this.analysis,
+    this.expenses = const [],
     this.bankDetails = const BankDetails(),
     this.openFile = openMonthlyWorkbook,
   });
 
+  final List<Expense> expenses;
   final String report;
   final String filename;
   final Uint8List bytes;
@@ -139,6 +143,33 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
                           : null,
                     ),
                     const SizedBox(height: 16),
+                    if (widget.analysis != null &&
+                        expensesForMonth(
+                          widget.expenses,
+                          widget.analysis!.month,
+                        ).isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Spesen',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            for (final expense in expensesForMonth(
+                              widget.expenses,
+                              widget.analysis!.month,
+                            ))
+                              Text(
+                                '${MaterialLocalizations.of(context).formatShortDate(expense.date)} · ${expense.description} · ${expenseAmount(expense.cents)}',
+                              ),
+                            Text(
+                              'Total: ${expenseAmount(expensesForMonth(widget.expenses, widget.analysis!.month).fold<int>(0, (sum, e) => sum + e.cents))}',
+                            ),
+                          ],
+                        ),
+                      ),
                     if (widget.analysis case final analysis?)
                       _MonthlyAnalysisView(
                         analysis: analysis,
