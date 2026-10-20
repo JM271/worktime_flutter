@@ -59,6 +59,88 @@ void main() {
     expect(find.text('Category: Bike Repair'), findsNothing);
   });
 
+  testWidgets('Editing replaces an entry, persists it, and cancel keeps it', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    final original = Entry(
+      'Original task',
+      DateTime(now.year, now.month, now.day, 23, 30, 12, 345),
+      DateTime(now.year, now.month, now.day + 1, 1, 15, 23, 456),
+      'Bike Repair',
+    );
+    SharedPreferences.setMockInitialValues({
+      'worktime': jsonEncode({
+        'entries': [original.toJson()],
+      }),
+    });
+    await tester.pumpWidget(const WorktimeApp());
+    await tester.pumpAndSettle();
+    final edit = find.byTooltip('Edit entry');
+    await tester.scrollUntilVisible(
+      edit,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    expect(find.text('Edit work time'), findsOneWidget);
+    final editor = find.byType(ManualEntry);
+    final description = find.descendant(
+      of: editor,
+      matching: find.byType(TextField),
+    );
+    expect(
+      tester.widget<TextField>(description).controller!.text,
+      'Original task',
+    );
+    await tester.enterText(description, 'Corrected task');
+    final category = find.descendant(
+      of: editor,
+      matching: find.widgetWithText(ChoiceChip, 'Administration'),
+    );
+    await tester.ensureVisible(category);
+    await tester.tap(category);
+    await tester.pumpAndSettle();
+    final save = find.text('Save entry');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    final prefs = await SharedPreferences.getInstance();
+    final stored = jsonDecode(prefs.getString('worktime')!) as Map;
+    final entries = stored['entries'] as List;
+    expect(entries, hasLength(1));
+    final updated = Entry.fromJson(
+      Map<String, dynamic>.from(entries.single as Map),
+    );
+    expect(updated.task, 'Corrected task');
+    expect(updated.category, 'Administration');
+    expect(updated.start, original.start);
+    expect(updated.end, original.end);
+
+    await tester.scrollUntilVisible(
+      edit,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    await tester.enterText(description, 'Discard this');
+    Navigator.of(tester.element(editor)).pop();
+    await tester.pumpAndSettle();
+    expect(prefs.getString('worktime'), jsonEncode(stored));
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(const WorktimeApp());
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Corrected task'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Corrected task'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('A new timer needs both a description and a category', (
     tester,
   ) async {

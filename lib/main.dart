@@ -199,15 +199,22 @@ class _TrackerState extends State<Tracker> {
     save();
   }
 
-  Future<void> manual() async {
+  Future<void> manual([Entry? existing]) async {
     final result = await showModalBottomSheet<Entry>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => const ManualEntry(),
+      builder: (_) => ManualEntry(entry: existing),
     );
-    if (result != null) {
-      setState(() => entries.add(result));
+    if (result != null && mounted) {
+      setState(() {
+        if (existing == null) {
+          entries.add(result);
+        } else {
+          final index = entries.indexOf(existing);
+          if (index != -1) entries[index] = result;
+        }
+      });
       await save();
     }
   }
@@ -623,6 +630,11 @@ class _TrackerState extends State<Tracker> {
                   ),
                 ),
               ),
+            ),
+            IconButton(
+              tooltip: 'Edit entry',
+              onPressed: () => manual(entry),
+              icon: const Icon(Icons.edit_outlined, size: 18),
             ),
             IconButton(
               tooltip: 'Delete entry',
@@ -1199,7 +1211,8 @@ class _TrackerState extends State<Tracker> {
 }
 
 class ManualEntry extends StatefulWidget {
-  const ManualEntry({super.key});
+  const ManualEntry({super.key, this.entry});
+  final Entry? entry;
   @override
   State<ManualEntry> createState() => _ManualEntryState();
 }
@@ -1211,10 +1224,41 @@ class _ManualEntryState extends State<ManualEntry> {
       end = const TimeOfDay(hour: 10, minute: 0);
   String? error;
   String? selectedCategory;
+  late DateTime endDay;
+
+  @override
+  void initState() {
+    super.initState();
+    final entry = widget.entry;
+    if (entry != null) {
+      task.text = entry.task;
+      day = entry.start;
+      start = TimeOfDay.fromDateTime(entry.start);
+      end = TimeOfDay.fromDateTime(entry.end!);
+      selectedCategory = entry.category;
+    }
+    endDay = entry?.end ?? day;
+  }
+
   @override
   void dispose() {
     task.dispose();
     super.dispose();
+  }
+
+  DateTime timestamp(DateTime date, TimeOfDay time, DateTime? original) {
+    final keepPrecision =
+        original != null && time == TimeOfDay.fromDateTime(original);
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+      keepPrecision ? original.second : 0,
+      keepPrecision ? original.millisecond : 0,
+      keepPrecision ? original.microsecond : 0,
+    );
   }
 
   @override
@@ -1230,9 +1274,9 @@ class _ManualEntryState extends State<ManualEntry> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Add work time',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          Text(
+            widget.entry == null ? 'Add work time' : 'Edit work time',
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           const Text(
@@ -1276,10 +1320,38 @@ class _ManualEntryState extends State<ManualEntry> {
                 firstDate: DateTime(2000),
                 lastDate: DateTime(2100),
               );
-              if (d != null) setState(() => day = d);
+              if (d != null && mounted) {
+                setState(() {
+                  endDay = DateTime(
+                    d.year,
+                    d.month,
+                    d.day +
+                        DateTime.utc(endDay.year, endDay.month, endDay.day)
+                            .difference(
+                              DateTime.utc(day.year, day.month, day.day),
+                            )
+                            .inDays,
+                  );
+                  day = d;
+                });
+              }
             },
             child: Text(
               MaterialLocalizations.of(context).formatMediumDate(day),
+            ),
+          ),
+          OutlinedButton(
+            onPressed: () async {
+              final d = await showDatePicker(
+                context: context,
+                initialDate: endDay,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100),
+              );
+              if (d != null && mounted) setState(() => endDay = d);
+            },
+            child: Text(
+              'End date: ${MaterialLocalizations.of(context).formatMediumDate(endDay)}',
             ),
           ),
           Row(
@@ -1318,20 +1390,8 @@ class _ManualEntryState extends State<ManualEntry> {
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () {
-              final a = DateTime(
-                    day.year,
-                    day.month,
-                    day.day,
-                    start.hour,
-                    start.minute,
-                  ),
-                  b = DateTime(
-                    day.year,
-                    day.month,
-                    day.day,
-                    end.hour,
-                    end.minute,
-                  );
+              final a = timestamp(day, start, widget.entry?.start);
+              final b = timestamp(endDay, end, widget.entry?.end);
               if (task.text.trim().isEmpty || !b.isAfter(a)) {
                 setState(
                   () => error = 'Enter a task description and an end time after the start.',
