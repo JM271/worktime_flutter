@@ -82,6 +82,9 @@ void main() {
       300,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(edit);
+    await tester.pumpAndSettle();
     await tester.tap(edit);
     await tester.pumpAndSettle();
     expect(find.text('Edit work time'), findsOneWidget);
@@ -123,6 +126,9 @@ void main() {
       300,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(edit);
+    await tester.pumpAndSettle();
     await tester.tap(edit);
     await tester.pumpAndSettle();
     await tester.enterText(description, 'Discard this');
