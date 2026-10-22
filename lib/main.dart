@@ -59,6 +59,7 @@ class Tracker extends StatefulWidget {
 class _TrackerState extends State<Tracker> {
   final task = TextEditingController();
   List<Entry> entries = [];
+  List<String> categories = List.of(taskCategories);
   List<Expense> expenses = [];
   Entry? running;
   Timer? ticker;
@@ -88,6 +89,8 @@ class _TrackerState extends State<Tracker> {
 
   Future<void> load() async {
     prefs = await SharedPreferences.getInstance();
+    categories =
+        prefs!.getStringList('worktime-categories') ?? List.of(taskCategories);
     confirmedBackup = prefs!.getString('worktime-confirmed-backup');
     try {
       final raw = jsonDecode(prefs!.getString('worktime') ?? '{"entries":[]}');
@@ -166,7 +169,7 @@ class _TrackerState extends State<Tracker> {
         taskError = task.text.trim().isEmpty
             ? 'Type what you are working on.'
             : null;
-        categoryError = taskCategories.contains(selectedCategory)
+        categoryError = categories.contains(selectedCategory)
             ? null
             : 'Choose a quick category.';
       });
@@ -204,7 +207,7 @@ class _TrackerState extends State<Tracker> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => ManualEntry(entry: existing),
+      builder: (_) => ManualEntry(entry: existing, categories: categories),
     );
     if (result != null && mounted) {
       setState(() {
@@ -217,6 +220,31 @@ class _TrackerState extends State<Tracker> {
       });
       await save();
     }
+  }
+
+  Future<void> editCategories() async {
+    final result = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => CategoryEditor(categories: categories),
+    );
+    if (result == null || !mounted) return;
+    final saved = await prefs!.setStringList('worktime-categories', result);
+    if (!mounted) return;
+    if (!saved) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Categories could not be saved.')),
+      );
+      return;
+    }
+    setState(() {
+      categories = result;
+      if (running == null && !categories.contains(selectedCategory)) {
+        selectedCategory = null;
+      }
+      categoryError = null;
+    });
   }
 
   Future<void> editExpense([Expense? existing]) async {
@@ -769,16 +797,28 @@ class _TrackerState extends State<Tracker> {
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'QUICK CATEGORIES',
-            style: TextStyle(
-              color: AppColors.muted,
-              letterSpacing: 1.8,
-              fontSize: 10,
-            ),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'QUICK CATEGORIES',
+                  style: TextStyle(
+                    color: AppColors.muted,
+                    letterSpacing: 1.8,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: editCategories,
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                label: const Text('Edit categories'),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           TaskCategoryPicker(
+            categories: categories,
             selectedCategory: selectedCategory,
             enabled: running == null,
             onSelected: (category) => setState(() {
@@ -1211,7 +1251,8 @@ class _TrackerState extends State<Tracker> {
 }
 
 class ManualEntry extends StatefulWidget {
-  const ManualEntry({super.key, this.entry});
+  const ManualEntry({super.key, this.entry, this.categories = taskCategories});
+  final List<String> categories;
   final Entry? entry;
   @override
   State<ManualEntry> createState() => _ManualEntryState();
@@ -1305,6 +1346,10 @@ class _ManualEntryState extends State<ManualEntry> {
           ),
           const SizedBox(height: 8),
           TaskCategoryPicker(
+            categories: {
+              ...widget.categories,
+              if (widget.entry?.category != null) widget.entry!.category!,
+            }.toList(),
             selectedCategory: selectedCategory,
             onSelected: (category) => setState(() {
               selectedCategory = category;
@@ -1398,7 +1443,9 @@ class _ManualEntryState extends State<ManualEntry> {
                 );
                 return;
               }
-              if (!taskCategories.contains(selectedCategory)) {
+              if (!widget.categories.contains(selectedCategory) &&
+                  !(widget.entry != null &&
+                      selectedCategory == widget.entry!.category)) {
                 setState(() => error = 'Choose a quick category.');
                 return;
               }
