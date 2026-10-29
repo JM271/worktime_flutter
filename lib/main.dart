@@ -1143,6 +1143,12 @@ class _TrackerState extends State<Tracker> {
                                 ListTile(
                                   contentPadding: EdgeInsets.zero,
                                   title: Text(expense.description),
+                                  leading: expense.receipt == null
+                                      ? null
+                                      : const Icon(
+                                          Icons.receipt_long,
+                                          semanticLabel: 'Beleg angehängt',
+                                        ),
                                   subtitle: Text(
                                     '${MaterialLocalizations.of(context).formatShortDate(expense.date)} · ${expenseAmount(expense.cents)}',
                                   ),

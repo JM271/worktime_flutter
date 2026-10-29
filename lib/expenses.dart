@@ -1,15 +1,25 @@
+import 'dart:convert';
+
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
+import 'receipt_image.dart';
+export 'receipt_image.dart' show receiptDimensions;
+
 class Expense {
-  const Expense(this.description, this.date, this.cents);
+  const Expense(this.description, this.date, this.cents, {this.receipt});
   final String description;
   final DateTime date;
   final int cents;
+  final Uint8List? receipt;
 
   Map<String, dynamic> toJson() => {
     'description': description,
     'date': date.toIso8601String(),
     'cents': cents,
+    if (receipt != null) 'receipt': base64Encode(receipt!),
   };
   factory Expense.fromJson(Map<String, dynamic> json) {
     final description = (json['description'] as String).trim();
@@ -17,7 +27,16 @@ class Expense {
     if (description.isEmpty || cents <= 0) {
       throw const FormatException('Ungültige Spesen.');
     }
-    return Expense(description, DateTime.parse(json['date'] as String), cents);
+    final receipt = json['receipt'] == null
+        ? null
+        : base64Decode(json['receipt'] as String);
+    if (receipt != null) receiptDimensions(receipt);
+    return Expense(
+      description,
+      DateTime.parse(json['date'] as String),
+      cents,
+      receipt: receipt,
+    );
   }
 }
 
@@ -56,6 +75,47 @@ class _ExpenseEditorState extends State<ExpenseEditor> {
         : (widget.expense!.cents / 100).toStringAsFixed(2),
   );
   late DateTime date = widget.expense?.date ?? DateTime.now();
+  late Uint8List? receipt = widget.expense?.receipt;
+  bool picking = false;
+
+  Future<void> pickReceipt() async {
+    setState(() => picking = true);
+    try {
+      final photo = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 90,
+        requestFullMetadata: false,
+      );
+      if (photo == null) return;
+      final compressed = await compute(
+        compressReceipt,
+        await photo.readAsBytes(),
+      );
+      if (mounted) setState(() => receipt = compressed);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error is FormatException
+                  ? error.message.toString()
+                  : error is PlatformException &&
+                        (error.code == 'camera_access_denied' ||
+                            error.code == 'camera_access_restricted')
+                  ? 'Bitte den Kamerazugriff in den Einstellungen erlauben.'
+                  : 'Kamera konnte nicht geöffnet oder Foto nicht verarbeitet werden.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => picking = false);
+    }
+  }
+
   @override
   void dispose() {
     description.dispose();
@@ -118,19 +178,53 @@ class _ExpenseEditorState extends State<ExpenseEditor> {
             },
           ),
           const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: picking ? null : pickReceipt,
+            icon: const Icon(Icons.camera_alt_outlined),
+            label: Text(
+              picking
+                  ? 'Foto wird verarbeitet …'
+                  : receipt == null
+                  ? 'Kassenzettel anhängen'
+                  : 'Kassenzettel ersetzen',
+            ),
+          ),
+          if (receipt != null) ...[
+            const SizedBox(height: 8),
+            Image.memory(
+              receipt!,
+              height: 240,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) =>
+                  const Text('Belegbild kann nicht angezeigt werden.'),
+            ),
+            Text(
+              'Beleg: ${(receipt!.length / 1024).ceil()} KB',
+              textAlign: TextAlign.center,
+            ),
+            TextButton.icon(
+              onPressed: picking ? null : () => setState(() => receipt = null),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Beleg entfernen'),
+            ),
+          ],
+          const SizedBox(height: 16),
           FilledButton(
-            onPressed: () {
-              if (form.currentState!.validate()) {
-                Navigator.pop(
-                  context,
-                  Expense(
-                    description.text.trim(),
-                    DateTime(date.year, date.month, date.day),
-                    parseExpenseCents(amount.text)!,
-                  ),
-                );
-              }
-            },
+            onPressed: picking
+                ? null
+                : () {
+                    if (form.currentState!.validate()) {
+                      Navigator.pop(
+                        context,
+                        Expense(
+                          description.text.trim(),
+                          DateTime(date.year, date.month, date.day),
+                          parseExpenseCents(amount.text)!,
+                          receipt: receipt,
+                        ),
+                      );
+                    }
+                  },
             child: const Text('Spesen speichern'),
           ),
         ],

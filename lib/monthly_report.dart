@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:excel/excel.dart' as xlsx;
 
 import 'models.dart';
+import 'receipt_workbook.dart';
 import 'expenses.dart';
 import 'report_analysis.dart';
 import 'bank_details.dart';
@@ -352,7 +353,9 @@ Uint8List monthlyWorkbookFromAnalysis(
       null,
       null,
       _text('Betrag (CHF)'),
+      _text('Beleg'),
     ]);
+    var receiptNumber = 0;
     for (final expense in monthExpenses) {
       sheet.appendRow([
         _text(expense.description),
@@ -360,6 +363,11 @@ Uint8List monthlyWorkbookFromAnalysis(
         null,
         null,
         xlsx.DoubleCellValue(expense.cents / 100),
+        _text(
+          expense.receipt == null
+              ? '–'
+              : 'Beleg ${++receiptNumber} (Blatt Belege)',
+        ),
       ]);
     }
     sheet.appendRow([
@@ -388,8 +396,38 @@ Uint8List monthlyWorkbookFromAnalysis(
       );
     }
   }
+  final receipts = monthExpenses.where((e) => e.receipt != null).toList();
+  if (receipts.isNotEmpty) {
+    sheet.setColumnWidth(5, 34);
+    final receiptSheet = book['Belege'];
+    receiptSheet.setColumnWidth(0, 95);
+    for (var i = 0; i < receipts.length; i++) {
+      final expense = receipts[i];
+      final row = i * 40;
+      receiptSheet.cell(
+          xlsx.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+        )
+        ..value = _text('Beleg ${i + 1} · ${expense.description}')
+        ..cellStyle = xlsx.CellStyle(
+          bold: true,
+          fontSize: 14,
+          textWrapping: xlsx.TextWrapping.WrapText,
+        );
+      receiptSheet.setRowHeight(row, 36);
+      receiptSheet
+          .cell(
+            xlsx.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row + 1),
+          )
+          .value = _text(
+        '${_date(expense.date)} · ${expenseAmount(expense.cents)}',
+      );
+      for (var r = row + 2; r < row + 40; r++) {
+        receiptSheet.setRowHeight(r, 18);
+      }
+    }
+  }
   book.setDefaultSheet('Worktime');
-  return Uint8List.fromList(book.encode()!);
+  return embedReceipts(book.encode()!, receipts);
 }
 
 xlsx.TextCellValue _text(String value) => xlsx.TextCellValue(value);

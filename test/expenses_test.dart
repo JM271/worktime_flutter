@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+import 'package:archive/archive.dart';
+import 'package:xml/xml.dart';
+
 import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -47,6 +50,103 @@ void main() {
     );
     expect((total[4]!.value as DoubleCellValue).value, 13.35);
   });
+  test(
+    'Receipt survives backup and is embedded only for the selected month',
+    () {
+      final png = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=',
+      );
+      final expense = Expense(
+        'Material & Werkzeug',
+        DateTime(2026, 10, 15),
+        1235,
+        receipt: png,
+      );
+      final backup = WorktimeBackup([], null, const BankDetails(), [expense]);
+      final restored = WorktimeBackup.decode(backup.encode()).expenses.single;
+      expect(restored.receipt, png);
+      final bytes = monthlyWorkbook(
+        [],
+        DateTime(2026, 10),
+        expenses: [
+          restored,
+          Expense('Alter Beleg', DateTime(2026, 9, 1), 100, receipt: png),
+        ],
+      );
+      final zip = ZipDecoder().decodeBytes(bytes);
+      expect(zip.files.where((f) => f.name.startsWith('xl/media/')).length, 1);
+      expect(zip.findFile('xl/media/receipt1.png')!.content, png);
+      for (final file in zip.files.where(
+        (f) => f.name.endsWith('.xml') || f.name.endsWith('.rels'),
+      )) {
+        expect(
+          () => XmlDocument.parse(utf8.decode(file.content as List<int>)),
+          returnsNormally,
+        );
+      }
+      final book = Excel.decodeBytes(bytes);
+      expect(book.tables.keys, contains('Belege'));
+      expect(
+        book['Belege'].rows.first.first!.value.toString(),
+        contains('Material & Werkzeug'),
+      );
+      final drawing = utf8.decode(
+        zip.findFile('xl/drawings/receipts.xml')!.content as List<int>,
+      );
+      expect(drawing, contains('r:embed="rId1"'));
+      final empty = ZipDecoder().decodeBytes(
+        monthlyWorkbook([], DateTime(2026, 11), expenses: [expense]),
+      );
+      expect(empty.findFile('xl/media/receipt1.png'), isNull);
+    },
+  );
+
+  testWidgets('Existing receipt can be removed without changing the original', (
+    tester,
+  ) async {
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=',
+    );
+    final original = Expense(
+      'Material',
+      DateTime(2026, 10, 15),
+      1235,
+      receipt: png,
+    );
+    Expense? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                result = await showModalBottomSheet<Expense>(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (_) => ExpenseEditor(expense: original),
+                );
+              },
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Kassenzettel ersetzen'), findsOneWidget);
+    await tester.ensureVisible(find.text('Beleg entfernen'));
+    await tester.tap(find.text('Beleg entfernen'));
+    await tester.pumpAndSettle();
+    expect(find.text('Kassenzettel anhängen'), findsOneWidget);
+    expect(original.receipt, png);
+    await tester.ensureVisible(find.text('Spesen speichern'));
+    await tester.tap(find.text('Spesen speichern'));
+    await tester.pumpAndSettle();
+    expect(result!.receipt, isNull);
+    expect(result!.cents, 1235);
+  });
+
   testWidgets('Editor validates and saves an expense', (tester) async {
     Expense? result;
     await tester.pumpWidget(
