@@ -1,4 +1,5 @@
 import 'expenses.dart';
+import 'monthly_pdf.dart';
 
 import 'dart:typed_data';
 import 'dart:math' as math;
@@ -18,6 +19,9 @@ const excelMimeType =
 Future<OpenResult> openMonthlyWorkbook(String path) =>
     OpenFilex.open(path, type: excelMimeType);
 
+Future<OpenResult> openMonthlyPdf(String path) =>
+    OpenFilex.open(path, type: 'application/pdf');
+
 class MonthlyReportDialog extends StatefulWidget {
   const MonthlyReportDialog({
     super.key,
@@ -28,6 +32,7 @@ class MonthlyReportDialog extends StatefulWidget {
     this.expenses = const [],
     this.bankDetails = const BankDetails(),
     this.openFile = openMonthlyWorkbook,
+    this.openPdfFile = openMonthlyPdf,
   });
 
   final List<Expense> expenses;
@@ -37,6 +42,7 @@ class MonthlyReportDialog extends StatefulWidget {
   final MonthlyAnalysis? analysis;
   final BankDetails bankDetails;
   final Future<OpenResult> Function(String path) openFile;
+  final Future<OpenResult> Function(String path) openPdfFile;
 
   @override
   State<MonthlyReportDialog> createState() => _MonthlyReportDialogState();
@@ -46,6 +52,11 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
   bool busy = false;
   String? error;
   String? savedPath;
+  String? savedPdfPath;
+  Uint8List? pdfBytes;
+
+  String get pdfFilename =>
+      widget.filename.replaceFirst(RegExp(r'\.xlsx$'), '.pdf');
 
   XFile get workbook => XFile.fromData(widget.bytes, mimeType: excelMimeType);
 
@@ -113,6 +124,63 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
     }
   }
 
+  Future<void> exportPdf({required bool share}) async {
+    final box = context.findRenderObject() as RenderBox?;
+    final origin = box == null
+        ? null
+        : box.localToGlobal(Offset.zero) & box.size;
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      pdfBytes ??= await monthlyPdfFromAnalysis(
+        widget.analysis!,
+        bankDetails: widget.bankDetails,
+        expenses: widget.expenses,
+      );
+      if (!mounted) return;
+      final file = XFile.fromData(pdfBytes!, mimeType: 'application/pdf');
+      if (share) {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [file],
+            fileNameOverrides: [pdfFilename],
+            sharePositionOrigin: origin,
+          ),
+        );
+      } else {
+        if (savedPdfPath == null) {
+          final directory = await getApplicationDocumentsDirectory();
+          final stem = pdfFilename.replaceFirst(RegExp(r'\.pdf$'), '');
+          final path =
+              '${directory.path}/$stem-${DateTime.now().microsecondsSinceEpoch}.pdf';
+          await file.saveTo(path);
+          savedPdfPath = path;
+        }
+        if (!mounted) return;
+        final result = await widget.openPdfFile(savedPdfPath!);
+        if (mounted && result.type != ResultType.done) {
+          setState(
+            () => error = result.type == ResultType.noAppToOpen
+                ? 'Keine PDF-App verfügbar. Bitte PDF teilen verwenden.'
+                : 'PDF konnte nicht geöffnet werden. Bitte erneut versuchen oder PDF teilen verwenden.',
+          );
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => error = share
+              ? 'PDF konnte nicht geteilt werden. Bitte erneut versuchen.'
+              : 'PDF konnte nicht geöffnet werden. Bitte erneut versuchen oder PDF teilen verwenden.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
@@ -122,7 +190,7 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
       title: const Text('Monthly report'),
       content: SizedBox(
         width: math.min(720, math.max(1, size.width - 84)),
-        height: structured ? math.max(120, size.height * 0.62) : null,
+        height: structured ? math.max(120, size.height * 0.52) : null,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -198,19 +266,88 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
       actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       actionsOverflowButtonSpacing: 8,
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Done'),
-        ),
-        OutlinedButton.icon(
-          onPressed: busy ? null : shareExcel,
-          icon: const Icon(Icons.ios_share, size: 18),
-          label: const Text('Share Excel'),
-        ),
-        FilledButton.icon(
-          onPressed: busy ? null : openExcel,
-          icon: const Icon(Icons.open_in_new, size: 18),
-          label: const Text('Open Excel'),
+        SizedBox(
+          width: 720,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      onPressed: busy ? null : shareExcel,
+                      icon: const Icon(Icons.ios_share, size: 16),
+                      label: const Text(
+                        'Share Excel',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      onPressed: busy ? null : openExcel,
+                      icon: const Icon(Icons.open_in_new, size: 16),
+                      label: const Text(
+                        'Open Excel',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (structured) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        onPressed: busy ? null : () => exportPdf(share: true),
+                        icon: const Icon(Icons.ios_share, size: 16),
+                        label: const Text(
+                          'PDF teilen',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        onPressed: busy ? null : () => exportPdf(share: false),
+                        icon: const Icon(
+                          Icons.picture_as_pdf_outlined,
+                          size: 16,
+                        ),
+                        label: const Text(
+                          'PDF ansehen',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Done'),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );

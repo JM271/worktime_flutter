@@ -63,6 +63,7 @@ void main() {
     WidgetTester tester,
     Future<OpenResult> Function(String) openFile, {
     bool intelligent = false,
+    Future<OpenResult> Function(String)? openPdfFile,
     BankDetails bankDetails = const BankDetails(),
   }) async {
     final bytes = monthlyWorkbook(
@@ -88,6 +89,7 @@ void main() {
                 : null,
             bankDetails: bankDetails,
             openFile: openFile,
+            openPdfFile: openPdfFile ?? openMonthlyPdf,
           ),
         ),
       ),
@@ -278,6 +280,69 @@ void main() {
       expect(find.text('Monthly report'), findsOneWidget);
     },
   );
+
+  testWidgets('PDF opens and shares the same document with a PDF filename', (
+    tester,
+  ) async {
+    final opened = Completer<String>();
+    final shared = Completer<MethodCall>();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(shareChannel, (call) async {
+          shared.complete(call);
+          return '';
+        });
+    await showReport(
+      tester,
+      (_) async => OpenResult(),
+      intelligent: true,
+      bankDetails: bankDetails,
+      openPdfFile: (path) async {
+        opened.complete(path);
+        return OpenResult(type: ResultType.noAppToOpen);
+      },
+    );
+    late String path;
+    await tester.runAsync(() async {
+      await tester.tap(find.text('PDF ansehen'));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    for (var i = 0; i < 50 && !opened.isCompleted; i++) {
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+    }
+    expect(opened.isCompleted, isTrue);
+    path = await opened.future;
+    await tester.pumpAndSettle();
+    expect(path, endsWith('.pdf'));
+    expect(find.textContaining('Keine PDF-App verfügbar'), findsOneWidget);
+    final openedBytes = await tester.runAsync(() => File(path).readAsBytes());
+    expect(ascii.decode(openedBytes!.take(5).toList()), '%PDF-');
+    late MethodCall call;
+    await tester.runAsync(() async {
+      await tester.tap(find.text('PDF teilen'));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    for (var i = 0; i < 50 && !shared.isCompleted; i++) {
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+    }
+    expect(shared.isCompleted, isTrue);
+    call = await shared.future;
+    await tester.pumpAndSettle();
+    final arguments = call.arguments as Map;
+    final sharedPath = (arguments['paths'] as List).single as String;
+    expect(sharedPath, endsWith('/worktime-2026-10.pdf'));
+    final sharedBytes = await tester.runAsync(
+      () => File(sharedPath).readAsBytes(),
+    );
+    expect(sharedBytes, openedBytes);
+    expect(arguments['originWidth'], greaterThan(0));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('Saving failure leaves the report and both actions available', (
     tester,
