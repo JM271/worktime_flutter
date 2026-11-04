@@ -9,16 +9,24 @@ import 'receipt_image.dart';
 export 'receipt_image.dart' show receiptDimensions;
 
 class Expense {
-  const Expense(this.description, this.date, this.cents, {this.receipt});
+  const Expense(
+    this.description,
+    this.date,
+    this.cents, {
+    this.receipt,
+    this.isSettled = false,
+  });
   final String description;
   final DateTime date;
   final int cents;
   final Uint8List? receipt;
+  final bool isSettled;
 
   Map<String, dynamic> toJson() => {
     'description': description,
     'date': date.toIso8601String(),
     'cents': cents,
+    'isSettled': isSettled,
     if (receipt != null) 'receipt': base64Encode(receipt!),
   };
   factory Expense.fromJson(Map<String, dynamic> json) {
@@ -36,6 +44,7 @@ class Expense {
       DateTime.parse(json['date'] as String),
       cents,
       receipt: receipt,
+      isSettled: json['isSettled'] as bool? ?? false,
     );
   }
 }
@@ -221,6 +230,7 @@ class _ExpenseEditorState extends State<ExpenseEditor> {
                           DateTime(date.year, date.month, date.day),
                           parseExpenseCents(amount.text)!,
                           receipt: receipt,
+                          isSettled: widget.expense?.isSettled ?? false,
                         ),
                       );
                     }

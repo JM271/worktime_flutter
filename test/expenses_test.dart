@@ -12,6 +12,26 @@ import 'package:worktime/bank_details.dart';
 import 'package:worktime/monthly_report.dart';
 
 void main() {
+  test('Settlement defaults to open and survives backup', () {
+    final legacy = {
+      'description': 'Ticket',
+      'date': '2026-11-05',
+      'cents': 1200,
+    };
+    expect(Expense.fromJson(legacy).isSettled, isFalse);
+    final settled = Expense(
+      'Ticket',
+      DateTime(2026, 11, 5),
+      1200,
+      isSettled: true,
+    );
+    final backup = WorktimeBackup([], null, const BankDetails(), [settled]);
+    expect(
+      WorktimeBackup.decode(backup.encode()).expenses.single.isSettled,
+      isTrue,
+    );
+  });
+
   test('Amounts accept comma and dot without rounding invalid input', () {
     expect(parseExpenseCents('12,35'), 1235);
     expect(parseExpenseCents('0.01'), 1);
@@ -112,6 +132,7 @@ void main() {
       DateTime(2026, 10, 15),
       1235,
       receipt: png,
+      isSettled: true,
     );
     Expense? result;
     await tester.pumpWidget(
@@ -145,6 +166,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(result!.receipt, isNull);
     expect(result!.cents, 1235);
+    expect(result!.isSettled, isTrue);
   });
 
   testWidgets('Editor validates and saves an expense', (tester) async {

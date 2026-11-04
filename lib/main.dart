@@ -116,18 +116,21 @@ class _TrackerState extends State<Tracker> {
     if (mounted) setState(() => ready = true);
   }
 
-  Future<void> save() async {
+  Future<bool> save({List<Expense>? updatedExpenses}) async {
     try {
       final ok = await prefs!.setString(
         'worktime',
         jsonEncode({
-          'expenses': expenses.map((e) => e.toJson()).toList(),
+          'expenses': (updatedExpenses ?? expenses)
+              .map((e) => e.toJson())
+              .toList(),
           'entries': entries.map((e) => e.toJson()).toList(),
           'running': running?.toJson(),
           'bankDetails': bankDetails.toJson(),
         }),
       );
       if (!ok) throw Exception();
+      return true;
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -137,6 +140,7 @@ class _TrackerState extends State<Tracker> {
         );
       }
     }
+    return false;
   }
 
   @override
@@ -263,6 +267,29 @@ class _TrackerState extends State<Tracker> {
       }
     });
     await save();
+  }
+
+  bool settlingExpense = false;
+
+  Future<void> toggleExpenseSettled(Expense expense) async {
+    if (settlingExpense) return;
+    final index = expenses.indexOf(expense);
+    if (index < 0) return;
+    final updated = List<Expense>.of(expenses);
+    updated[index] = Expense(
+      expense.description,
+      expense.date,
+      expense.cents,
+      receipt: expense.receipt,
+      isSettled: !expense.isSettled,
+    );
+    setState(() => settlingExpense = true);
+    final saved = await save(updatedExpenses: updated);
+    if (!mounted) return;
+    setState(() {
+      if (saved) expenses = updated;
+      settlingExpense = false;
+    });
   }
 
   Future<void> deleteExpense(Expense expense) async {
@@ -966,36 +993,15 @@ class _TrackerState extends State<Tracker> {
 
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 20,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.cyan.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppColors.cyan.withValues(alpha: 0.3),
-                ),
-              ),
-              child: const Icon(
-                Icons.bolt_rounded,
-                color: AppColors.cyan,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 10),
-            const Flexible(
-              child: Text(
-                'WORKTIME',
-                style: TextStyle(
-                  fontSize: 16,
-                  letterSpacing: 2,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
+        titleSpacing: 16,
+        automaticallyImplyLeading: false,
+        toolbarHeight:
+            (MediaQuery.sizeOf(context).width - 32) * 203 / 1600 + 16,
+        title: Image.asset(
+          'assets/brand/molenstraat.png',
+          width: double.infinity,
+          fit: BoxFit.contain,
+          semanticLabel: 'Molenstraat Fatbikes',
         ),
       ),
       body: !ready
@@ -1149,14 +1155,41 @@ class _TrackerState extends State<Tracker> {
                                           Icons.receipt_long,
                                           semanticLabel: 'Beleg angehängt',
                                         ),
-                                  subtitle: Text(
-                                    '${MaterialLocalizations.of(context).formatShortDate(expense.date)} · ${expenseAmount(expense.cents)}',
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${MaterialLocalizations.of(context).formatShortDate(expense.date)} · ${expenseAmount(expense.cents)} · ${expense.isSettled ? 'Abgerechnet' : 'Offen'}',
+                                      ),
+                                      TextButton.icon(
+                                        onPressed: settlingExpense
+                                            ? null
+                                            : () =>
+                                                  toggleExpenseSettled(expense),
+                                        icon: Icon(
+                                          expense.isSettled
+                                              ? Icons.check_circle
+                                              : Icons.check_circle_outline,
+                                        ),
+                                        label: Text(
+                                          expense.isSettled
+                                              ? 'Als offen markieren'
+                                              : 'Abgerechnet',
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  onTap: () => editExpense(expense),
+                                  onTap: settlingExpense
+                                      ? null
+                                      : () => editExpense(expense),
+                                  isThreeLine: true,
                                   trailing: IconButton(
                                     tooltip: 'Spesen löschen',
                                     icon: const Icon(Icons.delete_outline),
-                                    onPressed: () => deleteExpense(expense),
+                                    onPressed: settlingExpense
+                                        ? null
+                                        : () => deleteExpense(expense),
                                   ),
                                 ),
                             ],

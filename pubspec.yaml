@@ -71,6 +71,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/fonts/licenses/
+    - assets/brand/
   fonts:
     - family: JetBrains Mono
       fonts:
