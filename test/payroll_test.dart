@@ -14,7 +14,7 @@ void main() {
     month: DateTime(2026, 10),
     worked: worked,
     effectiveExpensesCents: 2590,
-    settings: const PayrollSettings(ahvNumber: '756.0000.0000.00'),
+    settings: const PayrollSettings(),
     date: DateTime(2026, 11, 2),
   );
 

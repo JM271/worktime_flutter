@@ -147,10 +147,6 @@ Future<Uint8List> payslipPdf(
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              info(
-                'AHV-Nummer',
-                payslip.ahvNumber.isEmpty ? '—' : payslip.ahvNumber,
-              ),
               info('Lohnabrechnungs Datum', _date(payslip.date)),
               info('Zahlungsdatum', _date(payslip.paymentDate)),
             ],

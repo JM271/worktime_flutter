@@ -15,7 +15,6 @@ class PayrollSettingsDialog extends StatefulWidget {
 class _PayrollSettingsDialogState extends State<PayrollSettingsDialog> {
   final form = GlobalKey<FormState>();
   late final s = widget.settings;
-  late final ahvNumber = TextEditingController(text: s.ahvNumber);
   late final hourly = TextEditingController(
     text: formatScaled(s.hourlyRateCents, 2),
   );
@@ -33,7 +32,6 @@ class _PayrollSettingsDialogState extends State<PayrollSettingsDialog> {
   );
 
   late final controllers = [
-    ahvNumber,
     hourly,
     vacation,
     ahv,
@@ -101,7 +99,6 @@ class _PayrollSettingsDialogState extends State<PayrollSettingsDialog> {
                 'Wird für die Lohnabrechnung beim Monatsabschluss verwendet. Nur auf diesem Gerät gespeichert.',
                 style: TextStyle(color: AppColors.muted, fontSize: 12),
               ),
-              field('AHV-Nummer', ahvNumber),
               field('Stundenlohn', hourly, decimals: 2, suffix: 'CHF'),
               field('Ferienentschädigung', vacation, decimals: 3, suffix: '%'),
               field('AHV/IV/EO', ahv, decimals: 3, suffix: '%'),
@@ -131,7 +128,6 @@ class _PayrollSettingsDialogState extends State<PayrollSettingsDialog> {
           Navigator.pop(
             context,
             PayrollSettings(
-              ahvNumber: ahvNumber.text.trim(),
               hourlyRateCents: parseScaled(hourly.text, 2)!,
               vacationRate: parseScaled(vacation.text, 3)!,
               ahvRate: parseScaled(ahv.text, 3)!,

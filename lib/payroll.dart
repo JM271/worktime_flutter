@@ -7,7 +7,6 @@ library;
 
 class PayrollSettings {
   const PayrollSettings({
-    this.ahvNumber = '',
     this.hourlyRateCents = 2800,
     this.vacationRate = 10640,
     this.ahvRate = 5300,
@@ -19,7 +18,6 @@ class PayrollSettings {
     this.flatExpensesCents = 990,
   });
 
-  final String ahvNumber;
   final int hourlyRateCents;
 
   /// Ferienentschädigung, AHV/IV/EO, ALV and NBU in thousandths of a percent.
@@ -34,7 +32,6 @@ class PayrollSettings {
   final int flatExpensesCents;
 
   Map<String, Object> toJson() => {
-    'ahvNumber': ahvNumber.trim(),
     'hourlyRateCents': hourlyRateCents,
     'vacationRate': vacationRate,
     'ahvRate': ahvRate,
@@ -53,7 +50,6 @@ class PayrollSettings {
         ? json[key] as int
         : fallback;
     return PayrollSettings(
-      ahvNumber: json['ahvNumber'] as String? ?? d.ahvNumber,
       hourlyRateCents: read('hourlyRateCents', d.hourlyRateCents),
       vacationRate: read('vacationRate', d.vacationRate),
       ahvRate: read('ahvRate', d.ahvRate),
@@ -92,7 +88,6 @@ class Payslip {
     required this.month,
     required this.date,
     required this.paymentDate,
-    required this.ahvNumber,
     required this.hoursHundredths,
     required this.lines,
     required this.grossCents,
@@ -102,7 +97,6 @@ class Payslip {
   });
 
   final DateTime month, date, paymentDate;
-  final String ahvNumber;
   final int hoursHundredths;
   final List<PayslipLine> lines;
   final int grossCents, deductionsCents, netCents, paymentCents;
@@ -140,7 +134,6 @@ Payslip calculatePayslip({
     month: DateTime(month.year, month.month),
     date: date,
     paymentDate: paymentDate ?? date,
-    ahvNumber: settings.ahvNumber.trim(),
     hoursHundredths: hours,
     grossCents: gross,
     deductionsCents: deductions,

@@ -1323,11 +1323,7 @@ class _TrackerState extends State<Tracker> {
                 OutlinedButton.icon(
                   onPressed: editPayrollSettings,
                   icon: const Icon(Icons.payments_outlined),
-                  label: Text(
-                    payrollSettings.ahvNumber.isEmpty
-                        ? 'Lohndaten erfassen'
-                        : 'Lohndaten bearbeiten',
-                  ),
+                  label: const Text('Lohndaten bearbeiten'),
                 ),
               ],
             ),
