@@ -1,5 +1,7 @@
 import 'expenses.dart';
 import 'monthly_pdf.dart';
+import 'payroll.dart';
+import 'payslip_pdf.dart';
 
 import 'dart:typed_data';
 import 'dart:math' as math;
@@ -31,6 +33,7 @@ class MonthlyReportDialog extends StatefulWidget {
     this.analysis,
     this.expenses = const [],
     this.bankDetails = const BankDetails(),
+    this.payrollSettings,
     this.openFile = openMonthlyWorkbook,
     this.openPdfFile = openMonthlyPdf,
   });
@@ -41,6 +44,9 @@ class MonthlyReportDialog extends StatefulWidget {
   final Uint8List bytes;
   final MonthlyAnalysis? analysis;
   final BankDetails bankDetails;
+
+  /// When set (with [analysis]), a Lohnabrechnung is calculated for the month.
+  final PayrollSettings? payrollSettings;
   final Future<OpenResult> Function(String path) openFile;
   final Future<OpenResult> Function(String path) openPdfFile;
 
@@ -54,6 +60,22 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
   String? savedPath;
   String? savedPdfPath;
   Uint8List? pdfBytes;
+  Uint8List? payslipBytes;
+  String? savedPayslipPath;
+
+  late final Payslip? payslip =
+      widget.analysis == null || widget.payrollSettings == null
+      ? null
+      : calculatePayslip(
+          month: widget.analysis!.month,
+          worked: widget.analysis!.total,
+          effectiveExpensesCents: expensesForMonth(
+            widget.expenses,
+            widget.analysis!.month,
+          ).fold<int>(0, (sum, e) => sum + e.cents),
+          settings: widget.payrollSettings!,
+          date: DateTime.now(),
+        );
 
   String get pdfFilename =>
       widget.filename.replaceFirst(RegExp(r'\.xlsx$'), '.pdf');
@@ -124,7 +146,7 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
     }
   }
 
-  Future<void> exportPdf({required bool share}) async {
+  Future<void> exportPdf({required bool share, bool payroll = false}) async {
     final box = context.findRenderObject() as RenderBox?;
     final origin = box == null
         ? null
@@ -134,32 +156,48 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
       error = null;
     });
     try {
-      pdfBytes ??= await monthlyPdfFromAnalysis(
-        widget.analysis!,
-        bankDetails: widget.bankDetails,
-        expenses: widget.expenses,
-      );
+      final Uint8List bytes;
+      if (payroll) {
+        bytes = payslipBytes ??= await payslipPdf(
+          payslip!,
+          bankDetails: widget.bankDetails,
+        );
+      } else {
+        bytes = pdfBytes ??= await monthlyPdfFromAnalysis(
+          widget.analysis!,
+          bankDetails: widget.bankDetails,
+          expenses: widget.expenses,
+        );
+      }
+      final filename = payroll
+          ? payslipFilename(widget.analysis!.month)
+          : pdfFilename;
       if (!mounted) return;
-      final file = XFile.fromData(pdfBytes!, mimeType: 'application/pdf');
+      final file = XFile.fromData(bytes, mimeType: 'application/pdf');
       if (share) {
         await SharePlus.instance.share(
           ShareParams(
             files: [file],
-            fileNameOverrides: [pdfFilename],
+            fileNameOverrides: [filename],
             sharePositionOrigin: origin,
           ),
         );
       } else {
-        if (savedPdfPath == null) {
+        var savedPath = payroll ? savedPayslipPath : savedPdfPath;
+        if (savedPath == null) {
           final directory = await getApplicationDocumentsDirectory();
-          final stem = pdfFilename.replaceFirst(RegExp(r'\.pdf$'), '');
-          final path =
+          final stem = filename.replaceFirst(RegExp(r'\.pdf$'), '');
+          savedPath =
               '${directory.path}/$stem-${DateTime.now().microsecondsSinceEpoch}.pdf';
-          await file.saveTo(path);
-          savedPdfPath = path;
+          await file.saveTo(savedPath);
+          if (payroll) {
+            savedPayslipPath = savedPath;
+          } else {
+            savedPdfPath = savedPath;
+          }
         }
         if (!mounted) return;
-        final result = await widget.openPdfFile(savedPdfPath!);
+        final result = await widget.openPdfFile(savedPath);
         if (mounted && result.type != ResultType.done) {
           setState(
             () => error = result.type == ResultType.noAppToOpen
@@ -211,6 +249,8 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
                           : null,
                     ),
                     const SizedBox(height: 10),
+                    if (payslip case final payslip?)
+                      _PayslipSummary(payslip: payslip),
                     if (widget.analysis != null &&
                         expensesForMonth(
                           widget.expenses,
@@ -339,6 +379,44 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
                   ],
                 ),
               ],
+              if (payslip != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        onPressed: busy
+                            ? null
+                            : () => exportPdf(share: true, payroll: true),
+                        icon: const Icon(Icons.ios_share, size: 16),
+                        label: const Text(
+                          'Lohn teilen',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        onPressed: busy
+                            ? null
+                            : () => exportPdf(share: false, payroll: true),
+                        icon: const Icon(Icons.payments_outlined, size: 16),
+                        label: const Text(
+                          'Lohn ansehen',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
@@ -350,6 +428,67 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PayslipSummary extends StatelessWidget {
+  const _PayslipSummary({required this.payslip});
+
+  final Payslip payslip;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget figure(String label, int cents, {bool strong = false}) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(color: Color(0xffbdbdbd), fontSize: 11),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'CHF ${chf(cents)}',
+          style: TextStyle(
+            fontSize: strong ? 15 : 13,
+            fontWeight: strong ? FontWeight.w700 : FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.text,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: DefaultTextStyle.merge(
+        style: const TextStyle(color: Colors.white),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'LOHNABRECHNUNG · ${chf(payslip.hoursHundredths)} h',
+              style: const TextStyle(
+                color: Color(0xffbdbdbd),
+                fontSize: 10,
+                letterSpacing: 1.6,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 20,
+              runSpacing: 8,
+              children: [
+                figure('Brutto', payslip.grossCents),
+                figure('Netto', payslip.netCents),
+                figure('Auszahlung', payslip.paymentCents, strong: true),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

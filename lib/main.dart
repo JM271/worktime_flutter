@@ -18,6 +18,8 @@ import 'app_style.dart';
 import 'models.dart';
 import 'report_analysis.dart';
 import 'retention.dart';
+import 'payroll.dart';
+import 'payroll_dialog.dart';
 import 'monthly_report.dart';
 import 'bank_details.dart';
 import 'bank_details_dialog.dart';
@@ -95,6 +97,7 @@ class _TrackerState extends State<Tracker> {
       ? 'Backup confirmed · up to date'
       : 'Changes since last backup';
   BankDetails bankDetails = defaultBankDetails;
+  PayrollSettings payrollSettings = const PayrollSettings();
   @override
   void initState() {
     super.initState();
@@ -109,6 +112,16 @@ class _TrackerState extends State<Tracker> {
     categories =
         prefs!.getStringList('worktime-categories') ?? List.of(taskCategories);
     confirmedBackup = prefs!.getString('worktime-confirmed-backup');
+    try {
+      final payroll = prefs!.getString('worktime-payroll');
+      if (payroll != null) {
+        payrollSettings = PayrollSettings.fromJson(
+          Map<String, dynamic>.from(jsonDecode(payroll) as Map),
+        );
+      }
+    } catch (_) {
+      // Unreadable payroll settings fall back to the defaults.
+    }
     try {
       final raw = jsonDecode(prefs!.getString('worktime') ?? '{"entries":[]}');
       entries = (raw['entries'] as List).map((e) => Entry.fromJson(e)).toList();
@@ -394,6 +407,7 @@ class _TrackerState extends State<Tracker> {
           analysis: analysis,
           expenses: expenses,
           bankDetails: bankDetails,
+          payrollSettings: payrollSettings,
         ),
       );
     } catch (_) {
@@ -471,6 +485,28 @@ class _TrackerState extends State<Tracker> {
         ),
       ),
     );
+  }
+
+  Future<void> editPayrollSettings() async {
+    final settings = await showDialog<PayrollSettings>(
+      context: context,
+      builder: (_) => PayrollSettingsDialog(settings: payrollSettings),
+    );
+    if (settings == null || !mounted) return;
+    final saved = await prefs!.setString(
+      'worktime-payroll',
+      jsonEncode(settings.toJson()),
+    );
+    if (!mounted) return;
+    if (!saved) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lohndaten konnten nicht gespeichert werden.'),
+        ),
+      );
+      return;
+    }
+    setState(() => payrollSettings = settings);
   }
 
   Future<void> createBackup() async {
@@ -1264,7 +1300,7 @@ class _TrackerState extends State<Tracker> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Review completed entries, category totals and bank details in Excel.',
+                  'Review completed entries, category totals and bank details in Excel, and get your Lohnabrechnung as PDF.',
                   style: TextStyle(color: AppColors.muted, fontSize: 13),
                 ),
                 const SizedBox(height: 10),
@@ -1281,6 +1317,16 @@ class _TrackerState extends State<Tracker> {
                     bankDetails.isEmpty
                         ? 'Add bank details'
                         : 'Edit bank details',
+                  ),
+                ),
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  onPressed: editPayrollSettings,
+                  icon: const Icon(Icons.payments_outlined),
+                  label: Text(
+                    payrollSettings.ahvNumber.isEmpty
+                        ? 'Lohndaten erfassen'
+                        : 'Lohndaten bearbeiten',
                   ),
                 ),
               ],
