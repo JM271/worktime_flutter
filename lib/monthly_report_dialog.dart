@@ -186,7 +186,7 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
     final size = MediaQuery.sizeOf(context);
     final structured = widget.analysis != null;
     return AlertDialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       title: const Text('Monthly report'),
       content: SizedBox(
         width: math.min(720, math.max(1, size.width - 84)),
@@ -210,14 +210,14 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
                             )
                           : null,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
                     if (widget.analysis != null &&
                         expensesForMonth(
                           widget.expenses,
                           widget.analysis!.month,
                         ).isNotEmpty)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.only(bottom: 10),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -250,11 +250,11 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
               ),
             ),
             if (busy) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               const LinearProgressIndicator(),
             ],
             if (error != null) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               Text(
                 error!,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
@@ -263,7 +263,7 @@ class _MonthlyReportDialogState extends State<MonthlyReportDialog> {
           ],
         ),
       ),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      actionsPadding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
       actionsOverflowButtonSpacing: 8,
       actions: [
         SizedBox(
@@ -399,8 +399,7 @@ class _MonthlyAnalysisView extends StatelessWidget {
           children: [
             Text(
               MaterialLocalizations.of(context).formatMonthYear(analysis.month),
-              style: Theme.of(context).textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             _ReportBadge(
               label: analysis.isCurrentMonth
@@ -412,12 +411,12 @@ class _MonthlyAnalysisView extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: AppColors.cyan.withValues(alpha: 0.07),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: AppColors.cyan.withValues(alpha: 0.25)),
           ),
           child: Column(
@@ -431,13 +430,13 @@ class _MonthlyAnalysisView extends StatelessWidget {
                   letterSpacing: 1.6,
                 ),
               ),
-              const SizedBox(height: 9),
+              const SizedBox(height: 6),
               SelectableText(
                 'Total time worked: ${_durationLabel(analysis.total)}',
                 style: const TextStyle(
+                  fontFamily: appDisplayFontFamily,
                   color: AppColors.text,
-                  fontSize: 23,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 17,
                 ),
               ),
               const SizedBox(height: 7),
@@ -448,7 +447,7 @@ class _MonthlyAnalysisView extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         _MetricGrid(
           metrics: [
             _ReportMetric('Sessions', '${analysis.sessionCount}'),
@@ -459,7 +458,7 @@ class _MonthlyAnalysisView extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 26),
+        const SizedBox(height: 14),
         _ReportSection(
           eyebrow: 'PERIOD COMPARISON',
           title: 'How this month compares',
@@ -471,7 +470,7 @@ class _MonthlyAnalysisView extends StatelessWidget {
                 analysis.comparisonLabel,
                 style: const TextStyle(color: AppColors.muted, fontSize: 12),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 8),
               _MetricGrid(
                 metrics: [
                   _ReportMetric(
@@ -484,7 +483,7 @@ class _MonthlyAnalysisView extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Text(
                 change == null
                     ? analysis.isFutureMonth
@@ -497,9 +496,9 @@ class _MonthlyAnalysisView extends StatelessWidget {
                 style: const TextStyle(color: AppColors.cyan, fontSize: 12),
               ),
               if (analysis.goal > Duration.zero) ...[
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 const Divider(height: 1),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
                 Text(
                   analysis.goalLabel,
                   style: const TextStyle(color: AppColors.muted, fontSize: 12),
@@ -512,7 +511,7 @@ class _MonthlyAnalysisView extends StatelessWidget {
                   style: const TextStyle(color: AppColors.lime, fontSize: 12),
                 ),
                 if (!analysis.isFutureMonth) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
                   LinearProgressIndicator(
                     value: analysis.goalProgress.clamp(0.0, 1.0),
                     minHeight: 6,
@@ -524,7 +523,7 @@ class _MonthlyAnalysisView extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         _ReportSection(
           eyebrow: 'DAILY & WEEKLY RHYTHM',
           title: 'Your working rhythm',
@@ -538,12 +537,12 @@ class _MonthlyAnalysisView extends StatelessWidget {
                     : 'Busiest day: ${MaterialLocalizations.of(context).formatShortDate(busiestDay.date)} · ${_durationLabel(busiestDay.total)}',
                 style: const TextStyle(color: AppColors.cyan, fontSize: 12),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 8),
               for (var i = 0; i < analysis.weeks.length; i++) ...[
-                if (i > 0) const SizedBox(height: 14),
+                if (i > 0) const SizedBox(height: 8),
                 _WeeklyBar(week: analysis.weeks[i], largest: largestWeek),
               ],
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               const Text(
                 'Weeks start on Monday and are limited to this month. Bars compare recorded weekly totals.',
                 style: TextStyle(color: AppColors.muted, fontSize: 10),
@@ -551,7 +550,7 @@ class _MonthlyAnalysisView extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         _ReportSection(
           eyebrow: 'WORK MIX',
           title: 'Where your time went',
@@ -565,7 +564,7 @@ class _MonthlyAnalysisView extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     for (var i = 0; i < analysis.categories.length; i++) ...[
-                      if (i > 0) const SizedBox(height: 18),
+                      if (i > 0) const SizedBox(height: 10),
                       _CategoryBar(
                         category: analysis.categories[i],
                         color: i.isEven ? AppColors.cyan : AppColors.lime,
@@ -574,14 +573,14 @@ class _MonthlyAnalysisView extends StatelessWidget {
                   ],
                 ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         _ReportSection(
           eyebrow: 'INSIGHTS',
           title: 'Patterns worth knowing',
           icon: Icons.auto_awesome_outlined,
           child: _ReportNotes(notes: analysis.insights, color: AppColors.cyan),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         _ReportSection(
           eyebrow: 'DATA QUALITY',
           title: qualityFlags ? 'Entries to review' : 'Recording checks',
@@ -600,7 +599,7 @@ class _MonthlyAnalysisView extends StatelessWidget {
                       _ReportBadge(
                         label:
                             '$reviewCount ${reviewCount == 1 ? 'entry' : 'entries'} to review',
-                        color: const Color(0xffffd08b),
+                        color: AppColors.muted,
                       ),
                     if (analysis.activeTimerCount > 0)
                       _ReportBadge(
@@ -610,17 +609,17 @@ class _MonthlyAnalysisView extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 8),
               ],
               _ReportNotes(
                 notes: analysis.checks,
-                color: qualityFlags ? const Color(0xffffd08b) : AppColors.lime,
+                color: qualityFlags ? AppColors.muted : AppColors.lime,
               ),
             ],
           ),
         ),
         if (!bankDetails.isEmpty) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           _ReportSection(
             eyebrow: 'BANK DETAILS',
             title: 'Account information',
@@ -633,7 +632,7 @@ class _MonthlyAnalysisView extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         const Text(
           'Open Excel for the full entry list, category totals and bank details.',
           style: TextStyle(color: AppColors.muted, fontSize: 11),
@@ -660,6 +659,54 @@ class _MetricGrid extends StatelessWidget {
     builder: (context, constraints) {
       final columns = constraints.maxWidth >= 480 ? metrics.length : 1;
       final width = (constraints.maxWidth - (columns - 1) * 10) / columns;
+      if (columns == 1) {
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            children: [
+              for (final (i, metric) in metrics.indexed)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: i == 0
+                      ? null
+                      : const BoxDecoration(
+                          border: Border(
+                            top: BorderSide(color: AppColors.border),
+                          ),
+                        ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          metric.label,
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        metric.value,
+                        style: const TextStyle(
+                          color: AppColors.text,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        );
+      }
       return Wrap(
         spacing: 10,
         runSpacing: 10,
@@ -667,10 +714,9 @@ class _MetricGrid extends StatelessWidget {
           for (final metric in metrics)
             Container(
               width: width,
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.background.withValues(alpha: 0.58),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppColors.border),
               ),
               child: Column(
@@ -687,9 +733,9 @@ class _MetricGrid extends StatelessWidget {
                   Text(
                     metric.value,
                     style: const TextStyle(
+                      fontFamily: appDisplayFontFamily,
                       color: AppColors.text,
-                      fontSize: 19,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
                     ),
                   ),
                 ],
@@ -734,10 +780,10 @@ class _ReportSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
+    padding: const EdgeInsets.all(10),
     decoration: BoxDecoration(
       color: AppColors.background.withValues(alpha: 0.3),
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(8),
       border: Border.all(color: AppColors.border),
     ),
     child: Column(
@@ -747,7 +793,7 @@ class _ReportSection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(icon, size: 20, color: AppColors.cyan),
-            const SizedBox(width: 10),
+            const SizedBox(width: 6),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -764,8 +810,8 @@ class _ReportSection extends StatelessWidget {
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+                      fontFamily: appDisplayFontFamily,
+                      fontSize: 13,
                       color: AppColors.text,
                     ),
                   ),
@@ -774,7 +820,7 @@ class _ReportSection extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 10),
         child,
       ],
     ),
@@ -882,7 +928,7 @@ class _ReportNotes extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       for (var i = 0; i < notes.length; i++) ...[
-        if (i > 0) const SizedBox(height: 14),
+        if (i > 0) const SizedBox(height: 8),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -890,7 +936,7 @@ class _ReportNotes extends StatelessWidget {
               padding: const EdgeInsets.only(top: 5),
               child: Icon(Icons.circle, size: 5, color: color),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 6),
             Expanded(
               child: Text(
                 notes[i],

@@ -147,6 +147,8 @@ void main() {
         });
     await tester.pumpWidget(const WorktimeApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Calculate month'),
       300,

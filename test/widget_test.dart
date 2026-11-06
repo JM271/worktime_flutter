@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:worktime/main.dart';
+import 'package:worktime/task_categories.dart';
 
 void main() {
   testWidgets('Timer saves an entry and survives restart', (tester) async {
@@ -12,7 +13,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'Client work');
     await tester.pumpAndSettle();
-    final category = find.widgetWithText(ChoiceChip, 'Bike Repair');
+    final category = find.widgetWithText(CategoryTile, 'Bike Repair');
     await tester.ensureVisible(category);
     await tester.pumpAndSettle();
     await tester.tap(category);
@@ -21,7 +22,7 @@ void main() {
       tester.widget<TextField>(find.byType(TextField).first).controller!.text,
       'Client work',
     );
-    expect(tester.widget<ChoiceChip>(category).selected, isTrue);
+    expect(tester.widget<CategoryTile>(category).selected, isTrue);
     await tester.pumpAndSettle();
     await tester.ensureVisible(
       find.widgetWithText(FilledButton, 'Start timer'),
@@ -30,7 +31,7 @@ void main() {
     await tester.tap(find.text('Start timer'));
     await tester.pump(const Duration(seconds: 2));
     expect(find.text('Stop & save'), findsOneWidget);
-    expect(tester.widget<ChoiceChip>(category).onSelected, isNull);
+    expect(tester.widget<CategoryTile>(category).onTap, isNull);
     await tester.ensureVisible(
       find.widgetWithText(FilledButton, 'Stop & save'),
     );
@@ -47,6 +48,8 @@ void main() {
     expect(entry.end, isNotNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(const WorktimeApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Work log'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Client work'),
@@ -76,6 +79,8 @@ void main() {
     });
     await tester.pumpWidget(const WorktimeApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Work log'));
+    await tester.pumpAndSettle();
     final edit = find.byTooltip('Edit entry');
     await tester.scrollUntilVisible(
       edit,
@@ -100,7 +105,7 @@ void main() {
     await tester.enterText(description, 'Corrected task');
     final category = find.descendant(
       of: editor,
-      matching: find.widgetWithText(ChoiceChip, 'Administration'),
+      matching: find.widgetWithText(CategoryTile, 'Administration'),
     );
     await tester.ensureVisible(category);
     await tester.tap(category);
@@ -138,6 +143,8 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(const WorktimeApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Work log'));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Corrected task'),
       300,
@@ -171,7 +178,7 @@ void main() {
     expect(find.text('Choose a quick category.'), findsWidgets);
 
     await tester.enterText(find.byType(TextField).first, '');
-    final category = find.widgetWithText(ChoiceChip, 'Bike Repair');
+    final category = find.widgetWithText(CategoryTile, 'Bike Repair');
     await tester.ensureVisible(category);
     await tester.pumpAndSettle();
     await tester.tap(category);

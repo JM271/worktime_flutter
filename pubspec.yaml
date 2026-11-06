@@ -76,6 +76,19 @@ flutter:
     - family: JetBrains Mono
       fonts:
         - asset: assets/fonts/JetBrainsMono.ttf
+    - family: Saira Semi Expanded
+      fonts:
+        - asset: assets/fonts/SairaSemiExpanded-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/SairaSemiExpanded-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/SairaSemiExpanded-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/SairaSemiExpanded-Bold.ttf
+          weight: 700
+    - family: Michroma
+      fonts:
+        - asset: assets/fonts/Michroma-Regular.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

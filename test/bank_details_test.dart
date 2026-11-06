@@ -14,6 +14,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const WorktimeApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
 
     Future<void> edit() async {
       await tester.scrollUntilVisible(
@@ -51,6 +53,8 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(const WorktimeApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
     await edit();
     expect(
       tester.widget<TextField>(fields.at(0)).controller!.text,
@@ -64,6 +68,8 @@ void main() {
     expect(find.text('Add bank details'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(const WorktimeApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Add bank details'),

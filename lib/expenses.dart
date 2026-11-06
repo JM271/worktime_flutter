@@ -135,10 +135,10 @@ class _ExpenseEditorState extends State<ExpenseEditor> {
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
     padding: EdgeInsets.fromLTRB(
-      24,
-      24,
-      24,
-      MediaQuery.viewInsetsOf(context).bottom + 24,
+      16,
+      16,
+      16,
+      MediaQuery.viewInsetsOf(context).bottom + 16,
     ),
     child: Form(
       key: form,
@@ -150,7 +150,7 @@ class _ExpenseEditorState extends State<ExpenseEditor> {
             widget.expense == null ? 'Spesen erfassen' : 'Spesen bearbeiten',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
           TextFormField(
             controller: description,
             decoration: const InputDecoration(
@@ -161,7 +161,7 @@ class _ExpenseEditorState extends State<ExpenseEditor> {
             validator: (v) =>
                 v == null || v.trim().isEmpty ? 'Beschreibung eingeben.' : null,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           TextFormField(
             controller: amount,
             decoration: const InputDecoration(labelText: 'Betrag (CHF)'),
@@ -170,7 +170,7 @@ class _ExpenseEditorState extends State<ExpenseEditor> {
                 ? 'Positiven Betrag mit maximal 2 Nachkommastellen eingeben.'
                 : null,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           OutlinedButton.icon(
             icon: const Icon(Icons.calendar_today_outlined),
             label: Text(
@@ -186,7 +186,7 @@ class _ExpenseEditorState extends State<ExpenseEditor> {
               if (selected != null && mounted) setState(() => date = selected);
             },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: picking ? null : pickReceipt,
             icon: const Icon(Icons.camera_alt_outlined),
@@ -217,7 +217,7 @@ class _ExpenseEditorState extends State<ExpenseEditor> {
               label: const Text('Beleg entfernen'),
             ),
           ],
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           FilledButton(
             onPressed: picking
                 ? null

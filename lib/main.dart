@@ -17,6 +17,7 @@ import 'task_categories.dart';
 import 'app_style.dart';
 import 'models.dart';
 import 'report_analysis.dart';
+import 'retention.dart';
 import 'monthly_report.dart';
 import 'bank_details.dart';
 import 'bank_details_dialog.dart';
@@ -28,11 +29,17 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks(
-      [appFontFamily],
+      ['JetBrains Mono'],
       await rootBundle.loadString(
         'assets/fonts/licenses/JetBrainsMono-OFL.txt',
       ),
     );
+    yield LicenseEntryWithLineBreaks([
+      appFontFamily,
+    ], await rootBundle.loadString('assets/fonts/licenses/Saira-OFL.txt'));
+    yield LicenseEntryWithLineBreaks([
+      appDisplayFontFamily,
+    ], await rootBundle.loadString('assets/fonts/licenses/Michroma-OFL.txt'));
   });
   runApp(const WorktimeApp());
 }
@@ -66,10 +73,20 @@ class _TrackerState extends State<Tracker> {
   SharedPreferences? prefs;
   bool ready = false;
   String filter = 'week';
+  int tab = 0;
   String? selectedCategory;
   String? taskError, categoryError;
   bool backupBusy = false;
-  String? confirmedBackup;
+  String? _confirmedBackup;
+  Set<String> _backedUpEntryKeys = const {};
+  String? get confirmedBackup => _confirmedBackup;
+  set confirmedBackup(String? data) {
+    _confirmedBackup = data;
+    _backedUpEntryKeys = backedUpEntryKeys(data);
+  }
+
+  List<Entry> get oldBackedUpEntries =>
+      prunableEntries(entries, _backedUpEntryKeys, DateTime.now());
   String get currentBackupData =>
       jsonEncode(WorktimeBackup(entries, running, bankDetails, expenses).data);
   String get backupStatus => confirmedBackup == null
@@ -401,8 +418,64 @@ class _TrackerState extends State<Tracker> {
     await save();
   }
 
+  Future<void> removeOldEntries() async {
+    final old = prunableEntries(entries, _backedUpEntryKeys, DateTime.now());
+    if (old.isEmpty || !mounted) return;
+    final cutoff = MaterialLocalizations.of(context)
+        .formatMediumDate(entryRetentionCutoff(DateTime.now()));
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Remove old time entries?'),
+        content: Text(
+          '${old.length} ${old.length == 1 ? 'entry' : 'entries'} from before $cutoff '
+          '${old.length == 1 ? 'is' : 'are'} already in your confirmed Drive backup. '
+          'Remove ${old.length == 1 ? 'it' : 'them'} from this device? '
+          'Reports for those months will then need the backup.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Keep'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    final wasUpToDate = confirmedBackup == currentBackupData;
+    final previous = List.of(entries);
+    final removed = Set<Entry>.identity()..addAll(old);
+    setState(() => entries.removeWhere(removed.contains));
+    if (!await save()) {
+      if (mounted) setState(() => entries = previous);
+      return;
+    }
+    // Everything still on the device remains covered by the Drive backup, so
+    // keep the status "up to date" and shrink the stored snapshot with it.
+    if (wasUpToDate) {
+      final data = currentBackupData;
+      if (await prefs!.setString('worktime-confirmed-backup', data) &&
+          mounted) {
+        setState(() => confirmedBackup = data);
+      }
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Removed ${old.length} old ${old.length == 1 ? 'entry' : 'entries'}.',
+        ),
+      ),
+    );
+  }
+
   Future<void> createBackup() async {
     setState(() => backupBusy = true);
+    var backupConfirmed = false;
     try {
       final proceed = await showDialog<bool>(
         context: context,
@@ -477,6 +550,7 @@ class _TrackerState extends State<Tracker> {
           throw StateError('Backup confirmation could not be saved.');
         }
         if (mounted) setState(() => confirmedBackup = snapshotData);
+        backupConfirmed = true;
       }
     } catch (_) {
       if (mounted) {
@@ -489,6 +563,7 @@ class _TrackerState extends State<Tracker> {
     } finally {
       if (mounted) setState(() => backupBusy = false);
     }
+    if (backupConfirmed && mounted) await removeOldEntries();
   }
 
   Future<void> restoreBackup() async {
@@ -563,15 +638,14 @@ class _TrackerState extends State<Tracker> {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Container(
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: AppColors.cyan.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.cyan.withValues(alpha: 0.18)),
+          color: AppColors.text,
+          borderRadius: BorderRadius.circular(6),
         ),
-        child: Icon(icon, color: AppColors.cyan, size: 22),
+        child: Icon(icon, color: Colors.white, size: 16),
       ),
-      const SizedBox(width: 12),
+      const SizedBox(width: 10),
       Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -584,11 +658,14 @@ class _TrackerState extends State<Tracker> {
                 letterSpacing: 2,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               title,
-              style: Theme.of(context).textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontFamily: appDisplayFontFamily,
+                fontSize: 14,
+                color: AppColors.text,
+              ),
             ),
           ],
         ),
@@ -597,11 +674,10 @@ class _TrackerState extends State<Tracker> {
   );
 
   Widget statusPill(String label, {Color color = AppColors.cyan}) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: color.withValues(alpha: 0.25)),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: color),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -611,7 +687,7 @@ class _TrackerState extends State<Tracker> {
           height: 5,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        const SizedBox(width: 7),
+        const SizedBox(width: 6),
         Flexible(
           child: Text(
             label,
@@ -628,31 +704,39 @@ class _TrackerState extends State<Tracker> {
 
   Widget metric(String label, Duration value, IconData icon, Color color) =>
       Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: AppColors.background.withValues(alpha: 0.65),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
+          color: AppColors.surfaceRaised,
+          borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(height: 14),
-            Text(
-              label,
-              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            Row(
+              children: [
+                Icon(icon, size: 14, color: AppColors.muted),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
                 hours(value),
                 style: TextStyle(
+                  fontFamily: appDisplayFontFamily,
                   color: color,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 19,
                 ),
               ),
             ),
@@ -661,11 +745,10 @@ class _TrackerState extends State<Tracker> {
       );
 
   Widget timeEntry(Entry entry) => Container(
-    margin: const EdgeInsets.only(top: 12),
-    padding: const EdgeInsets.fromLTRB(16, 12, 8, 16),
+    margin: const EdgeInsets.only(top: 8),
+    padding: const EdgeInsets.fromLTRB(12, 6, 4, 10),
     decoration: BoxDecoration(
-      color: AppColors.background.withValues(alpha: 0.6),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(8),
       border: Border.all(color: AppColors.border),
     ),
     child: Column(
@@ -676,11 +759,11 @@ class _TrackerState extends State<Tracker> {
           children: [
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.only(top: 6),
                 child: Text(
                   entry.task,
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -706,12 +789,12 @@ class _TrackerState extends State<Tracker> {
           entry.category?.trim().isNotEmpty == true
               ? entry.category!.trim()
               : 'Uncategorized',
-          style: const TextStyle(color: AppColors.cyan, fontSize: 12),
+          style: const TextStyle(color: AppColors.muted, fontSize: 12),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 6),
         Wrap(
-          spacing: 14,
-          runSpacing: 8,
+          spacing: 12,
+          runSpacing: 6,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
@@ -723,15 +806,15 @@ class _TrackerState extends State<Tracker> {
               style: const TextStyle(color: AppColors.muted, fontSize: 11),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: AppColors.lime.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(7),
+                color: AppColors.text,
+                borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
                 hours(entry.end!.difference(entry.start)),
                 style: const TextStyle(
-                  color: AppColors.lime,
+                  color: Colors.white,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -750,7 +833,6 @@ class _TrackerState extends State<Tracker> {
     final monthStart = DateTime(now.year, now.month);
     final nextMonthStart = DateTime(now.year, now.month + 1);
     final shown = entries.where((e) {
-      if (filter == 'all') return true;
       if (filter == 'month') {
         return e.start.isBefore(nextMonthStart) && e.end!.isAfter(monthStart);
       }
@@ -758,7 +840,7 @@ class _TrackerState extends State<Tracker> {
     }).toList()..sort((a, b) => b.start.compareTo(a.start));
 
     final timerPanel = AppPanel(
-      accent: running == null ? AppColors.cyan : AppColors.lime,
+      accent: running == null ? null : AppColors.text,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -783,7 +865,7 @@ class _TrackerState extends State<Tracker> {
             ],
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 28),
+            padding: const EdgeInsets.symmetric(vertical: 10),
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
@@ -793,9 +875,9 @@ class _TrackerState extends State<Tracker> {
                       : now.difference(running!.start),
                 ),
                 style: TextStyle(
-                  fontSize: 70,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1,
+                  fontFamily: appDisplayFontFamily,
+                  fontSize: 48,
+                  letterSpacing: 2,
                   color: running == null ? AppColors.text : AppColors.lime,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
@@ -806,11 +888,11 @@ class _TrackerState extends State<Tracker> {
             'What are you working on?',
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           TextField(
             controller: task,
             enabled: running == null,
-            minLines: 2,
+            minLines: 1,
             maxLines: 4,
             onChanged: (_) {
               if (taskError != null) setState(() => taskError = null);
@@ -823,7 +905,7 @@ class _TrackerState extends State<Tracker> {
               errorMaxLines: 2,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           Row(
             children: [
               const Expanded(
@@ -843,7 +925,7 @@ class _TrackerState extends State<Tracker> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           TaskCategoryPicker(
             categories: categories,
             selectedCategory: selectedCategory,
@@ -860,23 +942,18 @@ class _TrackerState extends State<Tracker> {
               style: const TextStyle(color: AppColors.error, fontSize: 12),
             ),
           ],
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: toggle,
             style: FilledButton.styleFrom(
-              backgroundColor: running == null
-                  ? AppColors.cyan
-                  : AppColors.lime,
-              foregroundColor: AppColors.background,
-              minimumSize: const Size.fromHeight(56),
+              backgroundColor: AppColors.text,
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(46),
             ),
             icon: Icon(
               running == null ? Icons.play_arrow_rounded : Icons.stop_rounded,
             ),
-            label: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(running == null ? 'Start timer' : 'Stop & save'),
-            ),
+            label: Text(running == null ? 'Start timer' : 'Stop & save'),
           ),
         ],
       ),
@@ -891,13 +968,13 @@ class _TrackerState extends State<Tracker> {
             'Your working week',
             Icons.insights_rounded,
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, constraints) {
-              final tileWidth = (constraints.maxWidth - 12) / 2;
+              final tileWidth = (constraints.maxWidth - 8) / 2;
               return Wrap(
-                spacing: 12,
-                runSpacing: 12,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   SizedBox(
                     width: tileWidth,
@@ -914,14 +991,14 @@ class _TrackerState extends State<Tracker> {
                       'This week',
                       week,
                       Icons.view_week_outlined,
-                      AppColors.lime,
+                      AppColors.cyan,
                     ),
                   ),
                 ],
               );
             },
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 12),
           Text(
             'WEEKLY GOAL',
             style: const TextStyle(
@@ -930,7 +1007,7 @@ class _TrackerState extends State<Tracker> {
               letterSpacing: 1.8,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             spacing: 12,
@@ -942,27 +1019,23 @@ class _TrackerState extends State<Tracker> {
               ),
               Text(
                 '${(week.inMinutes / 1200 * 100).round()}%',
-                style: const TextStyle(
-                  color: AppColors.lime,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           LinearProgressIndicator(
             value: (week.inMinutes / 1200).clamp(0.0, 1.0),
-            minHeight: 7,
-            color: AppColors.lime,
-            borderRadius: BorderRadius.circular(8),
+            minHeight: 5,
+            color: AppColors.text,
+            borderRadius: BorderRadius.circular(3),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.cyan.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.cyan.withValues(alpha: 0.15)),
+              color: AppColors.surfaceRaised,
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -971,15 +1044,15 @@ class _TrackerState extends State<Tracker> {
                   'This month',
                   style: TextStyle(fontSize: 12, color: AppColors.muted),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
                   hours(total(monthStart, now)),
                   style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w600,
+                    fontFamily: appDisplayFontFamily,
+                    fontSize: 19,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 const Text(
                   'Calculate month to review your Excel report.',
                   style: TextStyle(fontSize: 11, color: AppColors.muted),
@@ -991,39 +1064,308 @@ class _TrackerState extends State<Tracker> {
       ),
     );
 
+    final shownTotal = shown.fold(
+      Duration.zero,
+      (sum, e) => sum + e.end!.difference(e.start),
+    );
+    final workLogHeader = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        sectionTitle(
+          'WORK LOG',
+          'Your time entries',
+          Icons.format_list_bulleted_rounded,
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            for (final f in ['today', 'week', 'month'])
+              ChoiceChip(
+                label: Text(
+                  {
+                    'today': 'Today',
+                    'week': 'This week',
+                    'month': 'This month',
+                  }[f]!,
+                ),
+                selected: filter == f,
+                onSelected: (_) => setState(() => filter = f),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            Text(
+              '${shown.length} ${shown.length == 1 ? 'entry' : 'entries'} · ${hours(shownTotal)}',
+              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: manual,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Add time'),
+            ),
+          ],
+        ),
+        if (shown.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Column(
+              children: [
+                Icon(Icons.timelapse_rounded, color: AppColors.muted, size: 24),
+                SizedBox(height: 6),
+                Text(
+                  'Start the timer or add work you’ve already done.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.muted, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+
+    Widget page(Widget scrollable) => WorktimeBackground(
+      child: SafeArea(
+        bottom: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 960),
+            child: scrollable,
+          ),
+        ),
+      ),
+    );
+
+    final workLogPage = page(
+      ListView.builder(
+        key: const PageStorageKey('work-log'),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+        itemCount: shown.length + 1,
+        itemBuilder: (context, i) =>
+            i == 0 ? workLogHeader : timeEntry(shown[i - 1]),
+      ),
+    );
+
+    final sortedExpenses = List<Expense>.of(expenses)
+      ..sort((a, b) => b.date.compareTo(a.date));
+    final expensesHeader = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        sectionTitle('SPESEN', 'Spesen', Icons.receipt_long_outlined),
+        const SizedBox(height: 10),
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            Text(
+              'Diesen Monat: ${expenseAmount(expensesForMonth(expenses, DateTime.now()).fold<int>(0, (sum, e) => sum + e.cents))}',
+              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: () => editExpense(),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Spesen erfassen'),
+            ),
+          ],
+        ),
+        if (expenses.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Text(
+              'Noch keine Spesen erfasst.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.muted, fontSize: 13),
+            ),
+          ),
+      ],
+    );
+
+    Widget expenseTile(Expense expense) => Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(12, 2, 4, 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        visualDensity: VisualDensity.compact,
+        title: Text(
+          expense.description,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+        leading: expense.receipt == null
+            ? null
+            : const Icon(Icons.receipt_long, semanticLabel: 'Beleg angehängt'),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${MaterialLocalizations.of(context).formatShortDate(expense.date)} · ${expenseAmount(expense.cents)} · ${expense.isSettled ? 'Abgerechnet' : 'Offen'}',
+            ),
+            TextButton.icon(
+              onPressed: settlingExpense
+                  ? null
+                  : () => toggleExpenseSettled(expense),
+              icon: Icon(
+                expense.isSettled
+                    ? Icons.check_circle
+                    : Icons.check_circle_outline,
+              ),
+              label: Text(
+                expense.isSettled ? 'Als offen markieren' : 'Abgerechnet',
+              ),
+            ),
+          ],
+        ),
+        onTap: settlingExpense ? null : () => editExpense(expense),
+        isThreeLine: true,
+        trailing: IconButton(
+          tooltip: 'Spesen löschen',
+          icon: const Icon(Icons.delete_outline),
+          onPressed: settlingExpense ? null : () => deleteExpense(expense),
+        ),
+      ),
+    );
+
+    final expensesPage = page(
+      ListView.builder(
+        key: const PageStorageKey('expenses'),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+        itemCount: sortedExpenses.length + 1,
+        itemBuilder: (context, i) =>
+            i == 0 ? expensesHeader : expenseTile(sortedExpenses[i - 1]),
+      ),
+    );
+
+    final reviewPage = page(
+      ListView(
+        key: const PageStorageKey('review'),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+        children: [
+          AppPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                sectionTitle(
+                  'MONTHLY REVIEW',
+                  'See the whole picture.',
+                  Icons.table_chart_outlined,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Review completed entries, category totals and bank details in Excel.',
+                  style: TextStyle(color: AppColors.muted, fontSize: 13),
+                ),
+                const SizedBox(height: 10),
+                FilledButton.tonalIcon(
+                  onPressed: calculateMonth,
+                  icon: const Icon(Icons.calculate_outlined),
+                  label: const Text('Calculate month'),
+                ),
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  onPressed: editBankDetails,
+                  icon: const Icon(Icons.account_balance_outlined),
+                  label: Text(
+                    bankDetails.isEmpty
+                        ? 'Add bank details'
+                        : 'Edit bank details',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final logoHeight = ((MediaQuery.sizeOf(context).width - 32) * 203 / 1600)
+        .clamp(0.0, 64.0);
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
         automaticallyImplyLeading: false,
-        toolbarHeight:
-            (MediaQuery.sizeOf(context).width - 32) * 203 / 1600 + 16,
+        toolbarHeight: logoHeight + 12,
         title: Image.asset(
           'assets/brand/molenstraat.png',
           width: double.infinity,
+          height: logoHeight,
           fit: BoxFit.contain,
+          alignment: Alignment.centerLeft,
           semanticLabel: 'Molenstraat Fatbikes',
         ),
       ),
+      bottomNavigationBar: !ready
+          ? null
+          : DecoratedBox(
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: AppColors.border)),
+              ),
+              child: NavigationBar(
+                selectedIndex: tab,
+                onDestinationSelected: (i) => setState(() => tab = i),
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.timer_outlined),
+                    selectedIcon: Icon(Icons.timer),
+                    label: 'Timer',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.format_list_bulleted_rounded),
+                    label: 'Work log',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.receipt_long_outlined),
+                    selectedIcon: Icon(Icons.receipt_long),
+                    label: 'Spesen',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.table_chart_outlined),
+                    selectedIcon: Icon(Icons.table_chart),
+                    label: 'Review',
+                  ),
+                ],
+              ),
+            ),
       body: !ready
           ? const Center(child: CircularProgressIndicator())
+          : tab == 1
+          ? workLogPage
+          : tab == 2
+          ? expensesPage
+          : tab == 3
+          ? reviewPage
           : WorktimeBackground(
               child: SafeArea(
+                bottom: false,
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 960),
                     child: ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                      key: const PageStorageKey('dashboard'),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
                       children: [
                         Align(
                           alignment: Alignment.centerLeft,
                           child: statusPill(
                             backupStatus,
                             color: confirmedBackup == currentBackupData
-                                ? AppColors.lime
-                                : AppColors.cyan,
+                                ? AppColors.text
+                                : AppColors.muted,
                           ),
                         ),
-                        const SizedBox(height: 22),
+                        const SizedBox(height: 10),
                         LayoutBuilder(
                           builder: (context, constraints) {
                             if (constraints.maxWidth >= 760) {
@@ -1031,7 +1373,7 @@ class _TrackerState extends State<Tracker> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Expanded(flex: 3, child: timerPanel),
-                                  const SizedBox(width: 20),
+                                  const SizedBox(width: 10),
                                   Expanded(flex: 2, child: statsPanel),
                                 ],
                               );
@@ -1044,225 +1386,41 @@ class _TrackerState extends State<Tracker> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               sectionTitle(
-                                'WORK LOG',
-                                'Your time entries',
-                                Icons.format_list_bulleted_rounded,
-                              ),
-                              const SizedBox(height: 20),
-                              Wrap(
-                                spacing: 10,
-                                runSpacing: 10,
-                                children: [
-                                  FilledButton.tonalIcon(
-                                    onPressed: manual,
-                                    icon: const Icon(
-                                      Icons.add_rounded,
-                                      size: 18,
-                                    ),
-                                    label: const Text('Add time'),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 4,
-                                children: [
-                                  for (final f in [
-                                    'week',
-                                    'today',
-                                    'all',
-                                    'month',
-                                  ])
-                                    ChoiceChip(
-                                      label: Text(
-                                        {
-                                          'week': 'This week',
-                                          'today': 'Today',
-                                          'all': 'All time',
-                                          'month': 'This month',
-                                        }[f]!,
-                                      ),
-                                      selected: filter == f,
-                                      onSelected: (_) =>
-                                          setState(() => filter = f),
-                                    ),
-                                ],
-                              ),
-                              if (shown.isEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 30,
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Icon(
-                                        Icons.timelapse_rounded,
-                                        color: AppColors.cyan.withValues(
-                                          alpha: 0.5,
-                                        ),
-                                        size: 32,
-                                      ),
-                                      const SizedBox(height: 12),
-                                      const Text(
-                                        'Start the timer or add work you’ve already done.',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: AppColors.muted,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              for (final entry in shown) timeEntry(entry),
-                            ],
-                          ),
-                        ),
-                        AppPanel(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              sectionTitle(
-                                'SPESEN',
-                                'Spesen',
-                                Icons.receipt_long_outlined,
-                              ),
-                              const SizedBox(height: 16),
-                              FilledButton.tonalIcon(
-                                onPressed: () => editExpense(),
-                                icon: const Icon(Icons.add),
-                                label: const Text('Spesen erfassen'),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Diesen Monat: ${expenseAmount(expensesForMonth(expenses, DateTime.now()).fold<int>(0, (sum, e) => sum + e.cents))}',
-                              ),
-                              if (expenses.isEmpty)
-                                const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 16),
-                                  child: Text('Noch keine Spesen erfasst.'),
-                                ),
-                              for (final expense in (List<Expense>.of(
-                                expenses,
-                              )..sort((a, b) => b.date.compareTo(a.date))))
-                                ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: Text(expense.description),
-                                  leading: expense.receipt == null
-                                      ? null
-                                      : const Icon(
-                                          Icons.receipt_long,
-                                          semanticLabel: 'Beleg angehängt',
-                                        ),
-                                  subtitle: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${MaterialLocalizations.of(context).formatShortDate(expense.date)} · ${expenseAmount(expense.cents)} · ${expense.isSettled ? 'Abgerechnet' : 'Offen'}',
-                                      ),
-                                      TextButton.icon(
-                                        onPressed: settlingExpense
-                                            ? null
-                                            : () =>
-                                                  toggleExpenseSettled(expense),
-                                        icon: Icon(
-                                          expense.isSettled
-                                              ? Icons.check_circle
-                                              : Icons.check_circle_outline,
-                                        ),
-                                        label: Text(
-                                          expense.isSettled
-                                              ? 'Als offen markieren'
-                                              : 'Abgerechnet',
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  onTap: settlingExpense
-                                      ? null
-                                      : () => editExpense(expense),
-                                  isThreeLine: true,
-                                  trailing: IconButton(
-                                    tooltip: 'Spesen löschen',
-                                    icon: const Icon(Icons.delete_outline),
-                                    onPressed: settlingExpense
-                                        ? null
-                                        : () => deleteExpense(expense),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        AppPanel(
-                          accent: AppColors.lime,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              sectionTitle(
-                                'MONTHLY REVIEW',
-                                'See the whole picture.',
-                                Icons.table_chart_outlined,
-                              ),
-                              const SizedBox(height: 14),
-                              const Text(
-                                'Review completed entries, category totals and bank details in Excel.',
-                                style: TextStyle(
-                                  color: AppColors.muted,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              FilledButton.tonalIcon(
-                                onPressed: calculateMonth,
-                                icon: const Icon(Icons.calculate_outlined),
-                                label: const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 8),
-                                  child: Text('Calculate month'),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              OutlinedButton.icon(
-                                onPressed: editBankDetails,
-                                icon: const Icon(
-                                  Icons.account_balance_outlined,
-                                ),
-                                label: Text(
-                                  bankDetails.isEmpty
-                                      ? 'Add bank details'
-                                      : 'Edit bank details',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        AppPanel(
-                          accent: AppColors.cyan,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              sectionTitle(
                                 'YOUR DATA',
                                 'Google Drive backup',
                                 Icons.backup_outlined,
                               ),
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 8),
                               const Text(
                                 'Tap Back up to Google Drive, then choose Drive in the share menu and save the file. To restore, choose Drive in the file picker and select your backup. Includes entries, expenses, your active timer and bank details.',
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 10),
                               FilledButton.tonalIcon(
                                 onPressed: backupBusy ? null : createBackup,
                                 icon: const Icon(Icons.save_alt),
                                 label: const Text('Back up to Google Drive'),
                               ),
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 6),
                               OutlinedButton.icon(
                                 onPressed: backupBusy ? null : restoreBackup,
                                 icon: const Icon(Icons.restore),
                                 label: const Text('Restore from Google Drive'),
                               ),
+                              if (oldBackedUpEntries.length case final count
+                                  when count > 0) ...[
+                                const SizedBox(height: 6),
+                                TextButton.icon(
+                                  onPressed: backupBusy
+                                      ? null
+                                      : removeOldEntries,
+                                  icon: const Icon(Icons.cleaning_services),
+                                  label: Text(
+                                    'Remove $count backed-up '
+                                    '${count == 1 ? 'entry' : 'entries'} '
+                                    'older than $entryRetentionMonths months',
+                                  ),
+                                ),
+                              ],
                               if (backupBusy)
                                 const Padding(
                                   padding: EdgeInsets.only(top: 12),
@@ -1344,10 +1502,10 @@ class _ManualEntryState extends State<ManualEntry> {
   @override
   Widget build(BuildContext context) => Padding(
     padding: EdgeInsets.fromLTRB(
-      24,
-      24,
-      24,
-      MediaQuery.of(context).viewInsets.bottom + 24,
+      16,
+      16,
+      16,
+      MediaQuery.of(context).viewInsets.bottom + 16,
     ),
     child: SingleChildScrollView(
       child: Column(
@@ -1356,14 +1514,17 @@ class _ManualEntryState extends State<ManualEntry> {
         children: [
           Text(
             widget.entry == null ? 'Add work time' : 'Edit work time',
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              fontFamily: appDisplayFontFamily,
+              fontSize: 17,
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           const Text(
             'What are you working on?',
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           TextField(
             controller: task,
             minLines: 2,
@@ -1374,7 +1535,7 @@ class _ManualEntryState extends State<ManualEntry> {
               alignLabelWithHint: true,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           const Text(
             'QUICK CATEGORIES',
             style: TextStyle(
@@ -1383,7 +1544,7 @@ class _ManualEntryState extends State<ManualEntry> {
               fontSize: 10,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           TaskCategoryPicker(
             categories: {
               ...widget.categories,
@@ -1395,7 +1556,7 @@ class _ManualEntryState extends State<ManualEntry> {
               error = null;
             }),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           OutlinedButton(
             onPressed: () async {
               final d = await showDatePicker(
@@ -1424,6 +1585,7 @@ class _ManualEntryState extends State<ManualEntry> {
               MaterialLocalizations.of(context).formatMediumDate(day),
             ),
           ),
+          const SizedBox(height: 6),
           OutlinedButton(
             onPressed: () async {
               final d = await showDatePicker(
@@ -1471,7 +1633,7 @@ class _ManualEntryState extends State<ManualEntry> {
               error!,
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           FilledButton(
             onPressed: () {
               final a = timestamp(day, start, widget.entry?.start);
@@ -1493,10 +1655,7 @@ class _ManualEntryState extends State<ManualEntry> {
                 Entry(task.text.trim(), a, b, selectedCategory),
               );
             },
-            child: const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('Save entry'),
-            ),
+            child: const Text('Save entry'),
           ),
         ],
       ),

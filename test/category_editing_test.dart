@@ -43,8 +43,11 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(const WorktimeApp());
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(ChoiceChip, 'Customer Support'), findsOneWidget);
-    expect(find.widgetWithText(ChoiceChip, 'After Sales'), findsNothing);
+    expect(
+      find.widgetWithText(CategoryTile, 'Customer Support'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(CategoryTile, 'After Sales'), findsNothing);
     final picker = tester.widget<TaskCategoryPicker>(
       find.byType(TaskCategoryPicker),
     );
@@ -54,7 +57,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(ChoiceChip, 'Customer Support'), findsOneWidget);
+    expect(
+      find.widgetWithText(CategoryTile, 'Customer Support'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Category editor adds, removes, and validates names', (
@@ -81,5 +87,13 @@ void main() {
       find.text('Enter at least one category and fill in every name.'),
       findsOneWidget,
     );
+  });
+
+  test('Category grid picks even columns that fit the names', () {
+    expect(categoryColumns(10, 338), 2); // phone
+    expect(categoryColumns(10, 560), 2); // wide: 2 fills every row, 3 not
+    expect(categoryColumns(9, 560), 3);
+    expect(categoryColumns(7, 560), 3); // nothing even: use the most
+    expect(categoryColumns(10, 192), 1); // large text on a small phone
   });
 }

@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:worktime/main.dart';
+import 'package:worktime/task_categories.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -16,9 +17,15 @@ void main() {
     final icons = FontLoader('MaterialIcons')
       ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
     await icons.load();
-    final font = FontLoader('JetBrains Mono')
-      ..addFont(rootBundle.load('assets/fonts/JetBrainsMono.ttf'));
+    final font = FontLoader('Saira Semi Expanded')
+      ..addFont(rootBundle.load('assets/fonts/SairaSemiExpanded-Regular.ttf'))
+      ..addFont(rootBundle.load('assets/fonts/SairaSemiExpanded-Medium.ttf'))
+      ..addFont(rootBundle.load('assets/fonts/SairaSemiExpanded-SemiBold.ttf'))
+      ..addFont(rootBundle.load('assets/fonts/SairaSemiExpanded-Bold.ttf'));
     await font.load();
+    final display = FontLoader('Michroma')
+      ..addFont(rootBundle.load('assets/fonts/Michroma-Regular.ttf'));
+    await display.load();
   });
 
   for (final scenario in [
@@ -61,7 +68,7 @@ void main() {
               .textTheme
               .bodyMedium!
               .fontFamily,
-          'JetBrains Mono',
+          'Saira Semi Expanded',
         );
 
         Future<void> snapshot(String name) async {
@@ -85,6 +92,8 @@ void main() {
         }
 
         await snapshot('dashboard');
+        await tester.tap(find.text('Work log'));
+        await tester.pumpAndSettle();
         await tester.scrollUntilVisible(
           find.text('Add time'),
           250,
@@ -115,7 +124,7 @@ void main() {
         expect(find.text('Choose a quick category.'), findsOneWidget);
         final repair = find.descendant(
           of: find.byType(BottomSheet),
-          matching: find.widgetWithText(ChoiceChip, 'Bike Repair'),
+          matching: find.widgetWithText(CategoryTile, 'Bike Repair'),
         );
         await tester.ensureVisible(repair);
         await tester.pumpAndSettle();
@@ -138,6 +147,11 @@ void main() {
         );
         await tester.pumpAndSettle();
         await snapshot('entries');
+        await tester.tap(find.text('Spesen'));
+        await tester.pumpAndSettle();
+        await snapshot('expenses');
+        await tester.tap(find.text('Review'));
+        await tester.pumpAndSettle();
         await tester.scrollUntilVisible(
           find.text('Calculate month'),
           250,

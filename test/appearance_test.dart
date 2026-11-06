@@ -45,7 +45,7 @@ void main() {
     expect(find.text('YOUR TIME, WELL SPENT'), findsNothing);
     expect(find.text('Make time count.'), findsNothing);
     expect(find.text('Track your work, one task at a time.'), findsNothing);
-    expect(currentFont(tester), 'JetBrains Mono');
+    expect(currentFont(tester), 'Saira Semi Expanded');
     expect(find.byTooltip('Choose font'), findsNothing);
     expect(find.text('Stop & save'), findsOneWidget);
     expect(
@@ -59,7 +59,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(const WorktimeApp());
     await tester.pumpAndSettle();
-    expect(currentFont(tester), 'JetBrains Mono');
+    expect(currentFont(tester), 'Saira Semi Expanded');
     expect(find.text('Stop & save'), findsOneWidget);
     expect(prefs.getString('worktime'), savedWork);
     expect(
@@ -85,6 +85,6 @@ void main() {
     expect(entries.last.containsKey('project'), isFalse);
     expect(entries.last['start'], running.start.toIso8601String());
     expect(entries.last['end'], isNotNull);
-    expect(currentFont(tester), 'JetBrains Mono');
+    expect(currentFont(tester), 'Saira Semi Expanded');
   });
 }
