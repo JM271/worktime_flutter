@@ -191,6 +191,63 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  test('A month splits into four weeks, the last one running to month end', () {
+    expect(monthWeekBounds(DateTime(2026, 2, 17, 13, 30)), [
+      DateTime(2026, 2, 1),
+      DateTime(2026, 2, 8),
+      DateTime(2026, 2, 15),
+      DateTime(2026, 2, 22),
+      DateTime(2026, 3, 1),
+    ]);
+    expect(monthWeekBounds(DateTime(2026, 12, 31)).last, DateTime(2027, 1, 1));
+  });
+
+  testWidgets('The timer page shows hours worked per week of the month', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    Entry worked(int day, int minutes) {
+      final start = DateTime(now.year, now.month, day, 9);
+      return Entry(
+        'Client work',
+        start,
+        start.add(Duration(minutes: minutes)),
+        'Bike Repair',
+      );
+    }
+
+    SharedPreferences.setMockInitialValues({
+      'worktime': jsonEncode({
+        'entries': [
+          worked(2, 120).toJson(),
+          worked(7, 30).toJson(),
+          worked(8, 90).toJson(),
+          worked(23, 45).toJson(),
+        ],
+      }),
+    });
+    await tester.pumpWidget(const WorktimeApp());
+    await tester.pumpAndSettle();
+    final lastDay = DateTime(now.year, now.month + 1, 0).day;
+    for (final (index, value, days) in [
+      (0, '2h 30m', '1–7'),
+      (1, '1h 30m', '8–14'),
+      (2, '–', '15–21'),
+      (3, '0h 45m', '22–$lastDay'),
+    ]) {
+      final week = find.byKey(ValueKey('month-week-$index'));
+      expect(
+        find.descendant(of: week, matching: find.text(value)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: week, matching: find.text(days)),
+        findsOneWidget,
+      );
+    }
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('A new timer needs both a description and a category', (
     tester,
   ) async {

@@ -795,6 +795,96 @@ class _TrackerState extends State<Tracker> {
         ),
       );
 
+  /// Four bars, one per week of the current month, scaled to the busiest week.
+  Widget monthWeeks(DateTime now) {
+    final bounds = monthWeekBounds(now);
+    final weeks = [for (var i = 0; i < 4; i++) total(bounds[i], bounds[i + 1])];
+    final longest = weeks.reduce((a, b) => a > b ? a : b);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (var i = 0; i < 4; i++)
+          Expanded(
+            child: weekBar(
+              i,
+              weeks[i],
+              longest,
+              // Noon of the week's last day, so a clock change cannot shift it.
+              '${bounds[i].day}–${bounds[i + 1].subtract(const Duration(hours: 12)).day}',
+              current: !now.isBefore(bounds[i]) && now.isBefore(bounds[i + 1]),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget weekBar(
+    int index,
+    Duration worked,
+    Duration longest,
+    String days, {
+    required bool current,
+  }) {
+    const barHeight = 56.0;
+    final empty = worked == Duration.zero;
+    return Semantics(
+      key: ValueKey('month-week-$index'),
+      container: true,
+      label: 'Days $days: ${hours(worked)}',
+      child: ExcludeSemantics(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  empty ? '–' : hours(worked),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: empty ? AppColors.muted : AppColors.text,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              height: barHeight,
+              alignment: Alignment.bottomCenter,
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: AppColors.border)),
+              ),
+              child: empty
+                  ? null
+                  : Container(
+                      width: 28,
+                      // Keep even a few minutes visible as a sliver.
+                      height: (barHeight * worked.inSeconds / longest.inSeconds)
+                          .clamp(3.0, barHeight),
+                      decoration: const BoxDecoration(
+                        color: AppColors.text,
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(4),
+                        ),
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              days,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: current ? FontWeight.w700 : FontWeight.w400,
+                color: current ? AppColors.text : AppColors.muted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget timeEntry(Entry entry) => Container(
     margin: const EdgeInsets.only(top: 8),
     padding: const EdgeInsets.fromLTRB(12, 6, 4, 10),
@@ -1114,7 +1204,9 @@ class _TrackerState extends State<Tracker> {
                     fontSize: 19,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 12),
+                monthWeeks(now),
+                const SizedBox(height: 10),
                 const Text(
                   'Calculate month to review your Excel report.',
                   style: TextStyle(fontSize: 11, color: AppColors.muted),

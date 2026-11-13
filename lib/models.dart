@@ -26,6 +26,14 @@ String hours(Duration d) {
 String clock(Duration d) =>
     '${d.inHours.toString().padLeft(2, '0')}:${(d.inMinutes % 60).toString().padLeft(2, '0')}';
 
+/// Boundaries that split [month] into four weeks: days 1–7, 8–14, 15–21 and
+/// 22 to the end of the month. Week `i` runs from `[i]` up to, not including,
+/// `[i + 1]`.
+List<DateTime> monthWeekBounds(DateTime month) => [
+  for (final day in [1, 8, 15, 22]) DateTime(month.year, month.month, day),
+  DateTime(month.year, month.month + 1),
+];
+
 Duration monthlyTotal(List<Entry> entries, DateTime month) {
   final from = DateTime(month.year, month.month);
   final to = DateTime(month.year, month.month + 1);
