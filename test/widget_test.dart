@@ -154,6 +154,43 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('The +5 min button adds five minutes to the running timer', (
+    tester,
+  ) async {
+    final start = DateTime.now().subtract(const Duration(minutes: 10));
+    SharedPreferences.setMockInitialValues({
+      'worktime': jsonEncode({
+        'entries': [],
+        'running': Entry('Client work', start, null, 'Bike Repair').toJson(),
+      }),
+    });
+    await tester.pumpWidget(const WorktimeApp());
+    await tester.pumpAndSettle();
+    expect(find.text('00:10'), findsOneWidget);
+    final addFive = find.widgetWithText(OutlinedButton, '5 min');
+    await tester.ensureVisible(addFive);
+    await tester.pumpAndSettle();
+    await tester.tap(addFive);
+    await tester.pumpAndSettle();
+    expect(find.text('00:15'), findsOneWidget);
+    final prefs = await SharedPreferences.getInstance();
+    final stored = jsonDecode(prefs.getString('worktime')!) as Map;
+    final running = Entry.fromJson(
+      Map<String, dynamic>.from(stored['running'] as Map),
+    );
+    expect(running.start, start.subtract(const Duration(minutes: 5)));
+    expect(running.task, 'Client work');
+    expect(running.category, 'Bike Repair');
+    expect(running.end, isNull);
+
+    await tester.ensureVisible(find.text('Stop & save'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Stop & save'));
+    await tester.pumpAndSettle();
+    expect(addFive, findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('A new timer needs both a description and a category', (
     tester,
   ) async {

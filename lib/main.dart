@@ -236,6 +236,21 @@ class _TrackerState extends State<Tracker> {
     save();
   }
 
+  /// Credits five more minutes to the running timer by moving its start back.
+  void addFiveMinutes() {
+    final current = running;
+    if (current == null) return;
+    setState(() {
+      running = Entry(
+        current.task,
+        current.start.subtract(const Duration(minutes: 5)),
+        null,
+        current.category,
+      );
+    });
+    save();
+  }
+
   Future<void> manual([Entry? existing]) async {
     final result = await showModalBottomSheet<Entry>(
       context: context,
@@ -920,6 +935,17 @@ class _TrackerState extends State<Tracker> {
               ),
             ),
           ),
+          if (running != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Center(
+                child: OutlinedButton.icon(
+                  onPressed: addFiveMinutes,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('5 min'),
+                ),
+              ),
+            ),
           const Text(
             'What are you working on?',
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
